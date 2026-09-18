@@ -12,6 +12,7 @@ import { createLifecycle } from './lifecycle.mjs'
 import { smtcSupport } from './platform/index.mjs'
 import { createSettings } from './settings.mjs'
 import { createStore } from './store.mjs'
+import { createUpdateState, setupUpdater, updateLine } from './update.mjs'
 import { createWindow } from './window.mjs'
 
 app.setName('whenmusic')
@@ -49,9 +50,14 @@ const tracker = createTracker({ backSec: settings.get('backSec') ?? BACK_SEC, st
 const card = createCard({ corner: settings.get('corner') })
 const historyWindow = createWindow({ settings })
 
+const updateState = createUpdateState()
+let updater = null
+
 const lifecycle = createLifecycle({
   settings,
   dataDir: DATA_DIR,
+  updateLine: () => updateLine(updateState, { current: app.getVersion() }),
+  onCheckUpdate: () => updater?.check(),
   onToggleWindow: () => historyWindow.toggle(),
   onExport: () => exportData(),
   onImport: () => importData(),
@@ -435,6 +441,9 @@ app.whenReady().then(async () => {
 
   card.start()
   lifecycle.start({ onApplySetting: applySetting })
+
+  // 켜고 1분 뒤 한 번, 이후 하루 한 번. 설치는 앱을 끌 때 (REL-02 · REL-03)
+  updater = setupUpdater({ state: updateState, onChange: () => lifecycle.refresh() })
   wireShortcuts()
   tickTimer = setInterval(() => {
     tracker.tick() // 들은 시간을 누적하고 어디까지 갔는지 적는다
@@ -468,6 +477,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   control?.stop()
   card.destroy()
+  updater?.stop()
   historyWindow.destroy()
   lifecycle.destroy()
   store.close()

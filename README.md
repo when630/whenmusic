@@ -14,16 +14,28 @@
 
 단축키 — 창 `Ctrl+Alt+P` · 도장 `Ctrl+Alt+S` · 되감기 `Ctrl+Alt+←`
 
-## 현재 상태
+## 설치
 
-**개발 중. 설치 파일은 아직 없습니다.**
+[Releases](../../releases)에서 `WHENMUSIC-<버전>-win-x64.exe`를 받아 실행합니다. Windows 10 1809(10.0.17763) 이상이 필요합니다 — SMTC가 그때 들어왔습니다.
+
+### 처음 실행할 때 경고가 뜹니다
+
+코드 서명 인증서를 쓰지 않아서 Windows가 경고를 냅니다. 서명에는 연 수십만 원이 들고, 이 앱은 그 비용을 쓰지 않습니다. 대신 무엇을 하는 앱인지는 이 저장소의 코드가 전부입니다.
+
+"Windows의 PC 보호" 파란 창이 뜨면 **추가 정보** → **실행**을 누릅니다.
+
+## 만들어진 상태
 
 | 단계 | 상태 |
 |---|---|
-| Phase 0 — PoC | **끝남.** 읽기·세션 지목 제어·절대 시크를 실측으로 확인 (`poc/`) |
-| Phase 1 — 애드온에 제어 더하기 | **끝남 (2026-09-18).** 제어 6종을 포크에 노출하고 CI에서 세 타겟을 빌드해 [v1.1.0](https://github.com/when630/node-windows-smtc-monitor/releases/tag/v1.1.0)으로 릴리스. x64 바이너리는 `vendor/` |
-| Phase 2 — 카드 | **진행 중.** position 보간과 세션 분할 규칙까지 |
-| Phase 3 이후 | 도장 · 이력 창 · 릴리스 |
+| Phase 0 — PoC | 끝남. 읽기·세션 지목 제어·절대 시크를 실측으로 확인 (`poc/`) |
+| Phase 1 — 애드온 | 끝남. 제어 6종을 [v1.1.0](https://github.com/when630/node-windows-smtc-monitor/releases/tag/v1.1.0)으로 노출, x64 바이너리는 `vendor/` |
+| Phase 2 — 카드 | 끝남. 카드가 읽고 그리고 조작한다 |
+| Phase 3 — 도장 | 끝남. 저장소와 도장, 되돌아가면 확인 처리 |
+| Phase 4 — 이력 창 | 끝남. 이력·도장·설정 세 탭, 초성 검색 |
+| Phase 5 — 트레이·데이터 | 끝남. 내보내기·가져오기, 자동 시작 |
+| Phase 6 — 릴리스 | 진행 중. NSIS 설치 파일과 자동 업데이트 |
+| Phase 7 — 실사용 | 작성자가 2주 쓴 뒤 판단 (DONE-01) |
 
 네이티브 애드온은 [when630/node-windows-smtc-monitor](https://github.com/when630/node-windows-smtc-monitor)(Rust + napi-rs, MIT)를 씁니다. upstream은 [LeagueTavern/node-windows-smtc-monitor](https://github.com/LeagueTavern/node-windows-smtc-monitor)이고, 읽기 전용이라 제어를 더하려고 포크했습니다.
 
@@ -44,6 +56,21 @@
 Electron 43 · vanilla JS + CSS(프레임워크 없음) · `node:sqlite` 단일 파일 · electron-builder NSIS · 미서명 GitHub Releases + electron-updater.
 
 형제 앱과 다른 단 하나가 네이티브 애드온입니다. 그래서 개발 PC에 Rust·MSVC를 두지 않고 CI에서만 빌드합니다.
+
+```powershell
+npm install        # 아이콘까지 함께 구워집니다
+npm start          # 앱 실행
+npm test           # 순수 모듈 테스트 — SMTC도 화면도 필요 없습니다
+npm run smoke      # 창 없이 부팅만 확인
+npm run build      # dist/에 설치 파일
+```
+
+개발 중 화면을 눈으로 확인할 때는 실측값으로 만든 가짜 상태를 씁니다.
+
+```powershell
+npx electron . --demo playing --shot card.png          # 카드
+npx electron . --demo playing --shot win.png --window  # 이력 창
+```
 
 ## 형제 앱
 

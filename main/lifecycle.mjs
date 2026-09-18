@@ -10,7 +10,15 @@ import { trayImage } from './platform/index.mjs'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-export function createLifecycle({ settings, onToggleWindow, onExport, onImport, dataDir }) {
+export function createLifecycle({
+  settings,
+  onToggleWindow,
+  onExport,
+  onImport,
+  dataDir,
+  updateLine = () => '',
+  onCheckUpdate = null,
+}) {
   let tray = null
 
   function refresh() {
@@ -43,6 +51,8 @@ export function createLifecycle({ settings, onToggleWindow, onExport, onImport, 
           checked: !!settings.get('autoStart'),
           click: (item) => set('autoStart', item.checked),
         },
+        { type: 'separator' },
+        { label: updateLine(), enabled: !!onCheckUpdate, click: () => onCheckUpdate?.() },
         { type: 'separator' },
         { label: '내보내기…', click: onExport },
         { label: '가져오기…', click: onImport },
