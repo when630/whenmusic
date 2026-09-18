@@ -1,0 +1,61 @@
+{
+  "name": "whenmusic",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "재생 장치를 갖지 않는 음악 앱 — 무엇이 흐르는지 읽고, 탭을 찾지 않고 조작하고, 무엇을 들었는지 남긴다",
+  "author": "when630 <70129021+when630@users.noreply.github.com>",
+  "main": "main/index.mjs",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "build": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "build": {
+    "appId": "com.when630.whenmusic",
+    "productName": "WHENMUSIC",
+    "files": [
+      "main/**/*",
+      "renderer/**/*",
+      "vendor/**/*",
+      "build/*.png"
+    ],
+    "asarUnpack": [
+      "vendor/**/*.node"
+    ],
+    "artifactName": "WHENMUSIC-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "WHENMUSIC"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "when630",
+        "repo": "whenmusic"
+      }
+    ]
+  }
+}
