@@ -14,13 +14,27 @@
   <div class="veil"></div>
 
   <div class="body">
+    <!-- 호버할 때만 펼쳐진다 (CARD-08). 이전·다음은 자주 쓰는 동작이 아니라
+         평소 자리를 차지할 이유가 없다 (CTL-02) -->
+    <div class="extra" id="extra">
+      <div class="stamp-list" id="stampList">표시해 둔 순간이 없습니다</div>
+      <div class="ctl skip">
+        <button data-act="prev" title="이전" aria-label="이전">
+          <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button data-act="next" title="다음" aria-label="다음">
+          <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+        </button>
+      </div>
+    </div>
+
     <div class="meta">
       <div class="t" id="title">재생 중인 것이 없습니다</div>
       <div class="a" id="sub">Spotify·유튜브·플레이어에서 재생을 시작하면 여기 뜹니다</div>
     </div>
 
     <div class="row">
-      <span class="src" id="src" hidden><span class="d"></span><span id="app"></span></span>
+      <button class="src" id="src" hidden title="제어할 세션 바꾸기"><span class="d"></span><span id="app"></span></button>
       <div class="ctl">
         <button data-act="back" title="10초 되감기 (Ctrl+Alt+←)" aria-label="10초 되감기">
           <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg>

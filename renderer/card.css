@@ -103,7 +103,49 @@ body {
   margin-top: 8px;
 }
 
+/* 호버 확장 (CARD-08 · CTL-02) */
+.extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 160ms ease, opacity 160ms ease, margin-bottom 160ms ease;
+}
+.card.open .extra {
+  max-height: 30px;
+  opacity: 1;
+  margin-bottom: 8px;
+}
+/* 도장은 가로로 나열한다. 세로로 쌓으면 카드가 커지고, 카드가 커지면
+   화면 구석을 차지하는 이유가 사라진다 */
+.stamp-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.stamp-list .one {
+  color: var(--music);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  background: var(--music-dim);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex: none;
+}
+.ctl.skip {
+  margin-left: auto;
+}
+
 .src {
+  all: unset;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -115,6 +157,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 99px;
   padding: 1px 7px 1px 5px;
+  cursor: default;
+}
+/* 세션이 둘 이상일 때만 누를 수 있다 (CARD-11) */
+.src.pickable:hover {
+  border-color: var(--music);
+  color: var(--music);
 }
 .src .d {
   width: 6px;

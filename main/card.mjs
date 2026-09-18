@@ -126,6 +126,22 @@ export function createCard({ corner = 'br' } = {}) {
       win.webContents.send(CH.STAMPS, list)
     },
 
+    /**
+     * CARD-10 — 세션이 없으면 안내를 잠깐 보여 준 뒤 사라진다.
+     * 빈 카드가 화면 구석에 계속 붙어 있을 이유가 없다.
+     */
+    setVisible(on) {
+      if (!win || win.isDestroyed()) return
+      if (on) {
+        if (!win.isVisible()) {
+          win.showInactive()
+          raise()
+        }
+      } else if (win.isVisible()) {
+        win.hide()
+      }
+    },
+
     /** CARD-13 — 설정에서 좌하단으로 옮긴다. */
     setCorner(next) {
       placement = next === 'bl' ? 'bl' : 'br'
@@ -142,8 +158,17 @@ export function createCard({ corner = 'br' } = {}) {
      * 이 창은 클릭도 포커스도 받지 않아서 평범한 화면 캡처 도구로 확인하기
      * 번거롭다. 렌더러가 실제로 무엇을 그렸는지 보는 가장 짧은 길이다.
      */
-    async capture(file) {
+    async capture(file, { open = false } = {}) {
       if (!win || win.isDestroyed()) return false
+
+      // 호버 확장은 마우스가 있어야 열린다. 캡처할 때는 강제로 펼친다.
+      if (open) {
+        await win.webContents.executeJavaScript(
+          "document.getElementById('card').classList.add('open')"
+        )
+        await new Promise((r) => setTimeout(r, 220))
+      }
+
       const image = await win.webContents.capturePage()
       const { writeFile } = await import('node:fs/promises')
       await writeFile(file, image.toPNG())

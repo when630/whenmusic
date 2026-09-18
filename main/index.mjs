@@ -34,11 +34,24 @@ let tickTimer = null
 
 let demo = null
 
+// CARD-10 — 세션이 없을 때 안내를 보여 주는 시간. 이보다 길면 빈 카드가
+// 그냥 상주하는 것이 되고, 짧으면 읽을 틈이 없다.
+const EMPTY_LINGER_MS = 8000
+let emptySince = null
+
 function paint() {
   if (demo) return card.push(demo)
 
   const snap = tracker.snapshot()
   card.push({ ...snap, artUrl: artOf(snap.appId) })
+
+  if (snap.state === 'empty') {
+    emptySince ??= Date.now()
+    card.setVisible(Date.now() - emptySince < EMPTY_LINGER_MS)
+  } else {
+    emptySince = null
+    card.setVisible(true)
+  }
 }
 
 // 썸네일은 세션마다 한 번만 data URL로 만든다. 1초마다 23KB를 base64로
@@ -155,8 +168,8 @@ function wireIpc() {
           break
 
         case ACTION.PICK:
-          tracker.pick(id)
-          refreshCaps(id)
+          tracker.pickNext()
+          refreshCaps(tracker.currentId)
           paint()
           break
       }
@@ -202,7 +215,7 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       paint()
       setTimeout(async () => {
-        await card.capture(shotFile)
+        await card.capture(shotFile, { open: process.argv.includes('--open') })
         app.exit(0)
       }, 400)
     }, 1200)

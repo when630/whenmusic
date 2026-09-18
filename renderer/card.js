@@ -16,6 +16,7 @@ const el = {
   fill: document.getElementById('fill'),
   progress: document.getElementById('progress'),
   toggle: document.getElementById('icon-toggle'),
+  stampList: document.getElementById('stampList'),
 }
 
 const ICON = {
@@ -37,7 +38,10 @@ function render(next) {
   el.sub.textContent = sub ?? ''
 
   el.src.hidden = !app
-  el.app.textContent = app ?? ''
+  // CARD-11 — 세션이 둘 이상이면 어느 것을 제어 중인지 드러나고, 눌러서 바꾼다
+  el.src.classList.toggle('pickable', (next.sessionCount ?? 1) > 1)
+  el.app.textContent =
+    (next.sessionCount ?? 1) > 1 ? `${app} (${next.sessionIndex}/${next.sessionCount})` : (app ?? '')
 
   if (artUrl) {
     el.art.style.backgroundImage = `url("${artUrl}")`
@@ -64,6 +68,36 @@ function render(next) {
   el.toggle.appendChild(path)
 
   applyCaps(caps)
+  renderStampList(stamps ?? [], next.durSec)
+}
+
+// CARD-08 — 호버하면 이번 세션의 도장 목록이 보인다. 도장 자체는 Phase 3다.
+function renderStampList(stamps, durSec) {
+  if (!stamps.length) {
+    el.stampList.textContent = '표시해 둔 순간이 없습니다'
+    return
+  }
+
+  el.stampList.replaceChildren(
+    ...stamps
+      .slice(-3)
+      .reverse()
+      .map((st) => {
+        const row = document.createElement('span')
+        row.className = 'one'
+        row.dataset.pos = String(st.posSec)
+        row.textContent = fmt(st.posSec)
+        return row
+      })
+  )
+}
+
+function fmt(sec) {
+  const t = Math.floor(sec)
+  const s = String(t % 60).padStart(2, '0')
+  const m = Math.floor(t / 60) % 60
+  const h = Math.floor(t / 3600)
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
 }
 
 // CARD-07 · STMP-06 — 이번 세션에 찍은 도장을 진행바에 눈금으로 남긴다.
@@ -120,6 +154,7 @@ document.addEventListener('mousemove', (e) => {
   if (on !== inside) {
     inside = on
     api.hover(on)
+    el.card.classList.toggle('open', on)
   }
 })
 
@@ -127,6 +162,7 @@ document.addEventListener('mouseleave', () => {
   if (!inside) return
   inside = false
   api.hover(false)
+  el.card.classList.remove('open')
 })
 
 el.card.addEventListener('click', (e) => {
@@ -134,6 +170,16 @@ el.card.addEventListener('click', (e) => {
   if (!btn || btn.disabled || !snap?.appId) return
 
   const act = btn.dataset.act
+
+  if (btn.id === 'src') {
+    if (btn.classList.contains('pickable')) api.ctl({ action: 'pick' })
+    return
+  }
+
+  if (act === 'prev' || act === 'next') {
+    api.ctl({ action: act, appId: snap.appId })
+    return
+  }
 
   if (act === 'stamp') {
     api.stamp()
@@ -170,6 +216,14 @@ el.bar.addEventListener('click', (e) => {
   const r = el.bar.getBoundingClientRect()
   const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
   api.ctl({ action: 'seek', appId: snap.appId, sec: ratio * snap.durSec })
+})
+
+// 도장 목록에서 눌러도 그 지점으로 간다 (STMP-04)
+el.stampList.addEventListener('click', (e) => {
+  const row = e.target.closest('.one')
+  if (!row || !snap?.appId) return
+  api.ctl({ action: 'seek', appId: snap.appId, sec: Number(row.dataset.pos) })
+  flash('표시해 둔 지점으로')
 })
 
 api.onNow(render)

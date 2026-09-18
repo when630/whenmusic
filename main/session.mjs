@@ -222,6 +222,14 @@ export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
       if (sessions.has(id)) currentId = id
     },
 
+    /** CARD-11 — 다음 세션으로 넘긴다. 카드에서 배지를 누르면 이게 돈다. */
+    pickNext() {
+      const ids = [...sessions.keys()]
+      if (ids.length < 2) return
+      const at = ids.indexOf(currentId)
+      currentId = ids[(at + 1) % ids.length]
+    },
+
     get currentId() {
       return currentId
     },
@@ -261,6 +269,7 @@ export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
         }
       }
 
+      const ids = [...sessions.keys()]
       const durSec = s.timeline?.duration ?? 0
       const posSec = interpolate(anchor, clock(), durSec > 0 ? durSec : null)
       const channel = normalize(s.media?.artist ?? '')
@@ -270,7 +279,9 @@ export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
         appId: id,
         app: id,
         title: normalize(s.media?.title ?? '') || '(제목 없음)',
-        sub: sessions.size > 1 ? `${channel} · 세션 ${sessions.size}개` : channel,
+        sub: channel,
+        sessionCount: ids.length,
+        sessionIndex: ids.indexOf(id) + 1,
         posSec,
         durSec,
         nowText: hms(posSec),
