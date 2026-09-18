@@ -1,10 +1,12 @@
 // 앱 부트. 배선만 한다 — 계산은 session.mjs, 창은 card.mjs, 애드온은 control.mjs.
 import { app, globalShortcut, ipcMain } from 'electron'
+import path from 'node:path'
 
 import { createCard } from './card.mjs'
 import { createControl } from './control.mjs'
 import { ACTION, CH } from './ipc.mjs'
 import { PLAYBACK, createTracker } from './session.mjs'
+import { createStore } from './store.mjs'
 
 app.setName('whenmusic')
 
@@ -27,12 +29,19 @@ const shotFile = shotAt >= 0 ? process.argv[shotAt + 1] : null
 const demoAt = process.argv.indexOf('--demo')
 const demoName = demoAt >= 0 ? (process.argv[demoAt + 1] ?? 'playing') : null
 
-const tracker = createTracker({ backSec: BACK_SEC })
+// %APPDATA%\whenmusic\store.sqlite — 형제 앱과 폴더가 다르다 (PLAT-05)
+const store = createStore(path.join(app.getPath('userData'), 'store.sqlite'))
+if (store.state.notice) console.warn('[store]', store.state.notice)
+
+const tracker = createTracker({ backSec: BACK_SEC, store })
 const card = createCard()
 let control = null
 let tickTimer = null
 
 let demo = null
+// 단축키로 찍거나 되감으면 렌더러는 그 사실을 모른다. 다음 그리기에 한 번만
+// 실어 보낸다 (STMP-02 · CTL-03).
+let flashOnce = null
 
 // CARD-10 — 세션이 없을 때 안내를 보여 주는 시간. 이보다 길면 빈 카드가
 // 그냥 상주하는 것이 되고, 짧으면 읽을 틈이 없다.
@@ -43,7 +52,8 @@ function paint() {
   if (demo) return card.push(demo)
 
   const snap = tracker.snapshot()
-  card.push({ ...snap, artUrl: artOf(snap.appId) })
+  card.push({ ...snap, artUrl: artOf(snap.appId), flash: flashOnce })
+  flashOnce = null
 
   if (snap.state === 'empty') {
     emptySince ??= Date.now()
@@ -121,6 +131,7 @@ async function rewind(sec = BACK_SEC) {
 
   const target = Math.max(0, tracker.positionOf(id) - sec)
   tracker.assumeSeek(id, target) // 이벤트보다 먼저 카드를 맞춘다 (D-14)
+  flashOnce = `← ${sec}초 되감음`
   paint()
 
   try {
@@ -159,6 +170,8 @@ function wireIpc() {
 
         case ACTION.SEEK:
           tracker.assumeSeek(id, msg.sec)
+          // 도장으로 되돌아가 들었으면 확인 처리된다 (STMP-05)
+          tracker.confirmStampNear(msg.sec)
           paint()
           await control.seek(id, msg.sec)
           break
@@ -179,13 +192,21 @@ function wireIpc() {
     }
   })
 
-  // 도장은 Phase 3에서 붙인다. 지금 눌러도 카드가 혼자 반짝이고 끝난다.
-  ipcMain.on(CH.STAMP, () => {})
+  // STMP-01 — 확인을 요구하지 않는다. 찍고 끝이다.
+  ipcMain.on(CH.STAMP, () => stamp())
+}
+
+// STMP-01 — 확인을 요구하지 않는다. 찍고 끝이다.
+function stamp() {
+  const at = tracker.stamp()
+  if (at != null) flashOnce = '이 순간을 표시했습니다'
+  paint()
 }
 
 function wireShortcuts() {
   // 형제 앱과 겹치지 않는다 (PLAT-05)
   globalShortcut.register('Control+Alt+Left', () => rewind())
+  globalShortcut.register('Control+Alt+S', stamp)
 }
 
 app.whenReady().then(async () => {
@@ -209,7 +230,10 @@ app.whenReady().then(async () => {
 
   card.start()
   wireShortcuts()
-  tickTimer = setInterval(paint, TICK_MS)
+  tickTimer = setInterval(() => {
+    tracker.tick() // 들은 시간을 누적하고 어디까지 갔는지 적는다
+    paint()
+  }, TICK_MS)
 
   if (shotFile) {
     setTimeout(async () => {
@@ -231,4 +255,5 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   control?.stop()
   card.destroy()
+  store.close()
 })

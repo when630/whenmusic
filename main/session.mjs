@@ -96,12 +96,68 @@ export function cardState({ session, anchor, addonFailed = false }) {
 // 시계를 주입받으므로 이것도 테스트된다.
 
 
-export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
+export function createTracker({ clock = Date.now, backSec = 10, store = null } = {}) {
   const sessions = new Map() // appId -> MediaInfo
   const anchors = new Map() // appId -> anchor
   const caps = new Map() // appId -> PlaybackCapabilities
   let currentId = null
   let addonFailure = null
+
+  // 이력 적재 (HIST-03·04). store를 주지 않으면 통째로 건너뛴다 —
+  // 기록을 못 남겨도 카드는 그대로 동작해야 한다 (PLAT-03).
+  let playId = null // 지금 적고 있는 plays 줄
+  let playKey = null // 그 줄이 무엇에 대한 것인지
+  let lastTick = null
+  let stamps = []
+
+  function keyOf(id) {
+    const s = sessions.get(id)
+    if (!s) return null
+    return {
+      sourceApp: id,
+      title: normalize(s.media?.title ?? ''),
+      channel: normalize(s.media?.artist ?? ''),
+    }
+  }
+
+  function sameKey(a, b) {
+    return a && b && a.sourceApp === b.sourceApp && a.title === b.title && a.channel === b.channel
+  }
+
+  /**
+   * 지금 듣는 것에 맞는 plays 줄을 연다.
+   *
+   * 같은 믹스를 30분 안에 이어 들으면 앞의 줄에 계속 적는다 (HIST-04).
+   * 제목이 아직 비어 있으면(SMTC가 미디어 속성을 늦게 준다) 줄을 열지 않고
+   * 다음 기회를 기다린다 — 빈 제목으로 한 줄을 만들면 이력이 더러워진다.
+   */
+  function syncPlay() {
+    if (!store?.ok || !currentId) return
+
+    const key = keyOf(currentId)
+    if (!key?.title) return
+    if (sameKey(key, playKey) && playId != null) return
+
+    const now = clock()
+    const s = sessions.get(currentId)
+
+    const open = store.findOpenPlay({ ...key, notBefore: now - SPLIT_GAP_MS })
+    if (open) {
+      playId = open.id
+    } else {
+      playId = store.startPlay({
+        ...key,
+        titleRaw: s.media?.title ?? '',
+        durationSec: s.timeline?.duration || null,
+        thumbId: store.putThumb(s.media?.thumbnail),
+        startedAt: now,
+        posTrusted: anchors.get(currentId)?.trusted ?? false,
+      })
+    }
+
+    playKey = key
+    stamps = store.stampsOf(playId)
+  }
 
   function adopt(info, { trusted }) {
     if (!info?.sourceAppId) return
@@ -244,6 +300,63 @@ export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
       return interpolate(anchors.get(id), clock(), s?.timeline?.duration ?? null)
     },
 
+    /**
+     * 1초마다 불린다. 실제로 들은 시간을 누적하고 어디까지 갔는지 적는다.
+     * 관측한 시간만 센다 — 앱이 꺼져 있던 동안은 알 수 없고, 모르는 것을
+     * 지어내면 통계 전체가 거짓이 된다 (STOR-02).
+     */
+    tick() {
+      syncPlay()
+
+      const now = clock()
+      const elapsed = lastTick == null ? 0 : Math.max(0, now - lastTick)
+      lastTick = now
+
+      if (!store?.ok || playId == null || !currentId) return
+
+      const s = sessions.get(currentId)
+      const playing = s?.playback?.playbackStatus === PLAYBACK.PLAYING
+      const anchor = anchors.get(currentId)
+      const pos = interpolate(anchor, now, s?.timeline?.duration ?? null)
+      const prev = store.play(playId)
+
+      store.touchPlay(playId, {
+        listenedSec: playing ? (prev?.listened_sec ?? 0) + elapsed / 1000 : null,
+        lastPosSec: pos,
+        posTrusted: anchor?.trusted ?? false,
+        endedAt: now,
+        durationSec: s?.timeline?.duration || null,
+      })
+    },
+
+    /** STMP-01 — 지금 위치에 도장. 확인을 요구하지 않는다. */
+    stamp() {
+      syncPlay()
+      if (!store?.ok || playId == null || !currentId) return null
+
+      const s = sessions.get(currentId)
+      const posSec = interpolate(anchors.get(currentId), clock(), s?.timeline?.duration ?? null)
+
+      store.addStamp({ playId, posSec, at: clock() })
+      stamps = store.stampsOf(playId)
+      return posSec
+    },
+
+    /** STMP-05 — 되돌아가 들은 도장은 확인 처리한다. */
+    confirmStampNear(posSec, within = 2) {
+      if (!store?.ok || playId == null) return
+
+      const hit = stamps.find((st) => Math.abs(st.pos_sec - posSec) <= within && !st.confirmed_at)
+      if (!hit) return
+
+      store.confirmStamp(hit.id, clock())
+      stamps = store.stampsOf(playId)
+    },
+
+    get playId() {
+      return playId
+    },
+
     /** 카드가 그릴 것 (§6 · §9 `now`). */
     snapshot() {
       if (addonFailure) {
@@ -287,6 +400,8 @@ export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
         nowText: hms(posSec),
         durText: hms(durSec),
         caps: caps.get(id) ?? null,
+        // 진행바에 눈금으로 남는다 (CARD-07 · STMP-06)
+        stamps: stamps.map((st) => ({ posSec: st.pos_sec, at: st.at })),
         backSec,
       }
     },

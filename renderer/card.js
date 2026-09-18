@@ -69,6 +69,9 @@ function render(next) {
 
   applyCaps(caps)
   renderStampList(stamps ?? [], next.durSec)
+
+  // 단축키로 찍거나 되감았을 때 — 메인이 한 번만 실어 보낸다
+  if (next.flash) flash(next.flash)
 }
 
 // CARD-08 — 호버하면 이번 세션의 도장 목록이 보인다. 도장 자체는 Phase 3다.
