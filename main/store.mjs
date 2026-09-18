@@ -511,6 +511,81 @@ export function createStore(file) {
       ).all(...args)
     },
 
+    // --- 내보내기·가져오기 (DATA) ---
+
+    /**
+     * 내보낼 전부. 썸네일은 뺀다 — 23KB짜리가 줄마다 붙으면 파일이 수십 MB가
+     * 되는데, 같은 영상을 다시 들으면 SMTC가 다시 준다 (D-21).
+     */
+    exportRows() {
+      if (!state.ok) return { plays: [], stamps: [] }
+
+      return {
+        plays: q(
+          `SELECT id, source_app, title, title_raw, title_cho, channel, channel_cho,
+                  duration_sec, started_at, ended_at, listened_sec, last_pos_sec,
+                  pos_trusted, deleted_at
+           FROM plays ORDER BY started_at`
+        ).all(),
+        stamps: q('SELECT * FROM stamps ORDER BY at').all(),
+      }
+    },
+
+    /** 가져오기는 지금 데이터를 갈아끼운다 (DATA-02). 실패하면 통째로 되돌린다. */
+    replaceAll({ plays, stamps }) {
+      if (!state.ok) return false
+
+      return withTransaction(db, () => {
+        db.exec('DELETE FROM stamps')
+        db.exec('DELETE FROM plays')
+
+        const insertPlay = q(
+          `INSERT INTO plays
+            (id, source_app, title, title_raw, title_cho, channel, channel_cho,
+             duration_sec, thumb_id, started_at, ended_at, listened_sec,
+             last_pos_sec, pos_trusted, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`
+        )
+
+        for (const p of plays) {
+          insertPlay.run(
+            p.id,
+            p.source_app,
+            p.title,
+            p.title_raw ?? p.title,
+            p.title_cho ?? '',
+            p.channel ?? '',
+            p.channel_cho ?? '',
+            p.duration_sec ?? null,
+            p.started_at,
+            p.ended_at ?? null,
+            p.listened_sec ?? 0,
+            p.last_pos_sec ?? null,
+            p.pos_trusted ? 1 : 0,
+            p.deleted_at ?? null
+          )
+        }
+
+        const insertStamp = q(
+          `INSERT INTO stamps (id, play_id, pos_sec, at, confirmed_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+
+        for (const st of stamps) {
+          insertStamp.run(
+            st.id,
+            st.play_id,
+            st.pos_sec,
+            st.at,
+            st.confirmed_at ?? null,
+            st.deleted_at ?? null
+          )
+        }
+
+        return true
+      })
+    },
+
     unconfirmedCount() {
       if (!state.ok) return 0
       return (

@@ -1,11 +1,15 @@
 // 앱 부트. 배선만 한다 — 계산은 session.mjs, 창은 card.mjs, 애드온은 control.mjs.
-import { app, globalShortcut, ipcMain, shell } from 'electron'
+import { app, dialog, globalShortcut, ipcMain, shell } from 'electron'
+import fs from 'node:fs'
 import path from 'node:path'
 
 import { createCard } from './card.mjs'
+import { applyImport, buildExport } from './data.mjs'
 import { createControl } from './control.mjs'
 import { ACTION, CH } from './ipc.mjs'
 import { PLAYBACK, createTracker } from './session.mjs'
+import { createLifecycle } from './lifecycle.mjs'
+import { smtcSupport } from './platform/index.mjs'
 import { createSettings } from './settings.mjs'
 import { createStore } from './store.mjs'
 import { createWindow } from './window.mjs'
@@ -44,6 +48,76 @@ const settings = createSettings(path.join(DATA_DIR, 'settings.json'))
 const tracker = createTracker({ backSec: settings.get('backSec') ?? BACK_SEC, store })
 const card = createCard({ corner: settings.get('corner') })
 const historyWindow = createWindow({ settings })
+
+const lifecycle = createLifecycle({
+  settings,
+  dataDir: DATA_DIR,
+  onToggleWindow: () => historyWindow.toggle(),
+  onExport: () => exportData(),
+  onImport: () => importData(),
+})
+
+// --- 내보내기·가져오기 (DATA) -------------------------------------------
+
+async function exportData() {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'WHENMUSIC 내보내기',
+    defaultPath: `whenmusic-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (canceled || !filePath) return
+
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(buildExport({ store, settings }), null, 2))
+  } catch {
+    dialog.showErrorBox('WHENMUSIC', '파일을 쓰지 못했습니다')
+  }
+}
+
+async function importData() {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: 'WHENMUSIC 가져오기',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  })
+  if (canceled || !filePaths?.[0]) return
+
+  // 갈아끼우는 일이므로 한 번 묻는다. 직전 상태는 어차피 파일로 남지만,
+  // 모르고 누르는 일은 없어야 한다.
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: ['가져오기', '취소'],
+    defaultId: 1,
+    cancelId: 1,
+    message: '지금 기록을 이 파일로 갈아끼웁니다',
+    detail: '직전 상태는 데이터 폴더에 before-import-<시각>.json으로 남습니다.',
+  })
+  if (response !== 0) return
+
+  let data = null
+  try {
+    data = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'))
+  } catch {
+    dialog.showErrorBox('WHENMUSIC', '읽을 수 없는 파일입니다')
+    return
+  }
+
+  const result = applyImport({ store, settings, data, dataDir: DATA_DIR })
+  if (!result.ok) {
+    dialog.showErrorBox('WHENMUSIC', result.reason)
+    return
+  }
+
+  card.setCorner(settings.get('corner'))
+  lifecycle.refresh()
+  paint()
+
+  dialog.showMessageBox({
+    type: 'info',
+    message: '가져왔습니다',
+    detail: `이력 ${result.counts.plays}줄 · 도장 ${result.counts.stamps}개`,
+  })
+}
 let control = null
 let tickTimer = null
 
@@ -318,6 +392,7 @@ function wireWindowIpc() {
 // 설정은 바꾸는 즉시 적용된다 — 저장하고 다시 시작하라고 말하지 않는다.
 function applySetting(key, value) {
   if (key === 'corner') card.setCorner(value)
+  if (key === 'backSec' || key === 'corner') lifecycle.refresh()
   if (key === 'autoStart') app.setLoginItemSettings({ openAtLogin: !!value, args: ['--hidden'] })
   // backSec·blur는 다음 그리기에 실린다
   paint()
@@ -354,7 +429,12 @@ app.whenReady().then(async () => {
     seedDemoStore(store)
   }
 
+  // PLAT-02 — 쓸 수 없는 OS·빌드면 카드가 그 사실과 필요 조건을 말한다
+  const support = smtcSupport()
+  if (!support.ok) tracker.setFailure({ stage: 'platform', message: support.reason })
+
   card.start()
+  lifecycle.start({ onApplySetting: applySetting })
   wireShortcuts()
   tickTimer = setInterval(() => {
     tracker.tick() // 들은 시간을 누적하고 어디까지 갔는지 적는다
@@ -389,5 +469,6 @@ app.on('will-quit', () => {
   control?.stop()
   card.destroy()
   historyWindow.destroy()
+  lifecycle.destroy()
   store.close()
 })
