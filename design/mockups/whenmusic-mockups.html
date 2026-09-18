@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>WHENMUSIC — 미니 플레이어 시안</title>
+<style>
+/* ────────────────────────────────────────────────────────────
+   토큰은 whenwork/whennote/whencalendar renderer/tokens.css와 동일하다.
+   단일 원본은 그쪽이고 여기 값은 목업용 사본이다 — 바꾸지 말 것.
+   whenmusic이 더하는 것은 --music 한 쌍뿐이다. 형제 앱이 각자
+   하나씩 가져가는 자리다(whencalendar는 --live 청록).
+   ──────────────────────────────────────────────────────────── */
+@font-face {
+  font-family:'Pretendard Variable';
+  src: local('Pretendard Variable'), local('Pretendard');
+  font-weight:100 900; font-display:swap;
+}
+:root {
+  --bg-app:#16171c; --bg-raised:#1e2027; --bg-inset:#131419; --bg-hover:#262933;
+  --border:#2e323d; --border-focus:#7aa2f7;
+  --text-primary:#e6e8ee; --text-secondary:#a8afbd; --text-muted:#7b8294;
+  --accent:#7aa2f7; --accent-dim:rgba(122,162,247,.14);
+  --success:#9ece6a; --warning:#e0af68; --danger:#f7768e;
+
+  /* whenmusic 추가 — 진행·재생을 말하는 보라.
+     Tokyo Night 팔레트의 --cal-3과 같은 값이고, 형제 앱 중 아무도
+     강조색으로 쓰지 않은 유일한 자리다. */
+  --music:#bb9af7; --music-dim:rgba(187,154,247,.14);
+
+  --font-sans:"Pretendard Variable","Pretendard","Malgun Gothic",system-ui,sans-serif;
+  --font-mono:"Cascadia Code","D2Coding",Consolas,monospace;
+  --fs-lg:16px; --fs-md:14px; --fs-sm:13px; --fs-xs:12px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:16px;
+  --shadow-pop:0 12px 40px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
+
+  /* 오버레이 공통 — 바탕화면 위에 뜨는 것이라 창보다 약간 더 불투명하고
+     테두리를 흰빛으로 준다. 어떤 배경 위에 놓일지 모르기 때문이다. */
+  --ov-bg:rgba(18,21,27,.96);
+  --ov-border:1px solid rgba(255,255,255,.12);
+  --ov-shadow:0 7px 26px rgba(0,0,0,.5);
+}
+* { box-sizing:border-box; margin:0; }
+body {
+  background:#0c0d11; color:var(--text-primary);
+  font-family:var(--font-sans); font-size:var(--fs-md); line-height:1.5;
+  padding:28px 22px 80px; -webkit-font-smoothing:antialiased;
+}
+.page { max-width:1500px; margin:0 auto; }
+h1 { font-size:20px; font-weight:650; letter-spacing:-.4px; margin-bottom:4px; }
+.lede { color:var(--text-muted); font-size:13px; line-height:1.75; margin-bottom:8px; max-width:1040px; }
+.lede b { color:var(--text-secondary); }
+.lede code { font-family:var(--font-mono); font-size:11.5px; color:var(--music); }
+
+h2 { font-size:14.5px; font-weight:680; letter-spacing:-.2px; margin:34px 0 3px;
+     padding-top:18px; border-top:1px solid var(--border); }
+h2 .n { font-family:var(--font-mono); font-size:11px; color:var(--music);
+        background:var(--music-dim); border-radius:4px; padding:1px 6px; margin-right:7px; }
+.sublede { color:var(--text-muted); font-size:12.5px; line-height:1.7; margin-bottom:18px; max-width:1040px; }
+.sublede b { color:var(--text-secondary); }
+.sublede code { font-family:var(--font-mono); font-size:11.5px; color:var(--music); }
+
+.shelf { display:grid; grid-template-columns:repeat(auto-fit,minmax(660px,1fr)); gap:24px; }
+.shelf.tight { grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:20px; }
+.mock { min-width:0; }
+.mock > .cap { display:flex; align-items:baseline; gap:9px; margin-bottom:7px; flex-wrap:wrap; }
+.mock > .cap b { font-size:13.5px; font-weight:650; }
+.mock > .cap .tag { font-size:10.5px; font-family:var(--font-mono); color:var(--text-muted);
+                    border:1px solid var(--border); border-radius:4px; padding:0 5px; flex:none; }
+.mock > .cap span { font-size:11.5px; color:var(--text-muted); line-height:1.5; }
+.mock > .note { font-size:11.5px; color:var(--text-muted); line-height:1.7; margin-top:8px; }
+.mock > .note b { color:var(--text-secondary); font-weight:600; }
+.mock > .note .no { color:var(--danger); }
+.mock > .note .yes { color:var(--success); }
+
+/* ── 바탕 화면 — 오버레이는 배경 위에서만 평가할 수 있다 ──
+   전체화면 IDE를 흉내낸다. 주 사용자의 상황이 그것이기 때문이다
+   (whencalendar/docs/01_프로젝트.md 페르소나). */
+.desk {
+  position:relative; height:300px; border-radius:var(--r-lg); overflow:hidden;
+  border:1px solid var(--border); background:#11131a; user-select:none;
+}
+.desk.short { height:180px; }
+.desk .code {
+  font-family:var(--font-mono); font-size:11px; line-height:1.85;
+  color:#39404f; padding:15px 18px; white-space:pre; overflow:hidden;
+}
+.desk .code .k { color:#5a6b8c; } .desk .code .s { color:#556b4a; }
+.desk .code .c { color:#2e3440; } .desk .code .f { color:#6d5b8c; }
+.desk::after { /* 아래쪽이 어두워야 하단 오버레이가 실제처럼 보인다 */
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(to bottom,transparent 45%,rgba(0,0,0,.45));
+}
+.desk .tb { /* 가짜 창 탭 줄 */
+  display:flex; gap:1px; padding:6px 10px 0; border-bottom:1px solid #1b1e26; background:#0f1116;
+}
+.desk .tb i { font-style:normal; font-family:var(--font-mono); font-size:10.5px; color:#4a5160;
+              padding:4px 10px; border-radius:5px 5px 0 0; }
+.desk .tb i.on { background:#11131a; color:#7b8294; }
+.layer { position:absolute; inset:0; pointer-events:none; z-index:2; }
+
+/* ── 오버레이 공통 ── */
+.ov { background:var(--ov-bg); border:var(--ov-border); box-shadow:var(--ov-shadow);
+      color:var(--text-primary); white-space:nowrap; }
+
+/* 가짜 앨범아트 — 실물은 SMTC가 base64 썸네일로 준다 */
+.art { flex:none; border-radius:var(--r-sm); overflow:hidden; position:relative;
+       background:linear-gradient(135deg,#6d4b9c,#3b5b8c 55%,#2a6b6b); }
+.art.rd { border-radius:99px; }
+.art::after { content:""; position:absolute; inset:0;
+              background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.22),transparent 60%); }
+.art.b { background:linear-gradient(135deg,#8c5b3b,#6b4a2a 60%,#3b3b5b); }
+.art.none { background:var(--bg-inset); border:1px solid var(--border); }
+.art.none::after { display:none; }
+.art.none b { position:absolute; inset:0; display:grid; place-items:center;
+              font-size:13px; color:var(--text-muted); font-weight:500; }
+
+/* 곡 정보 */
+.meta { min-width:0; display:flex; flex-direction:column; gap:1px; }
+.meta .t { font-size:12.5px; font-weight:600; letter-spacing:-.2px; overflow:hidden;
+           text-overflow:ellipsis; }
+.meta .a { font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; }
+
+/* 소스 앱 배지 — SMTC가 주는 AUMID에서 온다. 이 앱의 정체성이 여기 있다:
+   무엇이 재생하든 한 줄로 보인다. */
+.src { display:inline-flex; align-items:center; gap:4px; flex:none;
+       font-size:10px; font-family:var(--font-mono); color:var(--text-muted);
+       background:var(--bg-inset); border:1px solid var(--border);
+       border-radius:99px; padding:1px 7px 1px 5px; }
+.src .d { width:6px; height:6px; border-radius:99px; flex:none; background:var(--text-muted); }
+.src.sp .d { background:var(--success); } .src.sp { color:#8fae63; }
+.src.br .d { background:var(--accent); } .src.br { color:#7a94c4; }
+
+/* 진행바 */
+.bar { height:2px; border-radius:2px; background:rgba(140,148,160,.24); overflow:hidden; }
+.bar i { display:block; height:100%; background:var(--music); box-shadow:0 0 8px var(--music-dim); }
+.bar.warn i { background:var(--warning); box-shadow:none; }
+.bar.idle i { background:var(--text-muted); box-shadow:none; }
+
+/* 컨트롤 */
+.ctl { display:flex; align-items:center; gap:2px; flex:none; }
+.ctl button { all:unset; display:grid; place-items:center; width:24px; height:24px;
+              border-radius:var(--r-sm); color:var(--text-secondary); cursor:default; }
+.ctl button:hover { background:var(--bg-hover); color:var(--text-primary); }
+.ctl button.big { width:28px; height:28px; background:var(--music-dim); color:var(--music); }
+.ctl svg { width:13px; height:13px; fill:currentColor; }
+.ctl button.big svg { width:14px; height:14px; }
+
+kbd { font-family:var(--font-mono); font-size:10.5px; background:var(--bg-inset);
+      border:1px solid var(--border); border-bottom-width:2px; border-radius:5px;
+      padding:1px 6px; color:var(--text-secondary); line-height:1.4; }
+
+/* ── 본체 창 껍데기 ──
+   기본 780×560 · 최소 620×440. 목록 한 줄과 검색바만 서면 되니
+   whencalendar(960×640)보다 작다. */
+.win {
+  width:100%; max-width:780px; height:560px; background:var(--bg-app);
+  border:1px solid var(--border); border-radius:var(--r-lg);
+  overflow:hidden; box-shadow:var(--shadow-pop); display:flex; flex-direction:column;
+}
+.win header {
+  display:flex; align-items:center; gap:var(--sp-4);
+  padding:9px var(--sp-4); border-bottom:1px solid var(--border); flex:none;
+}
+.win header .title { font-size:var(--fs-xs); font-weight:750; letter-spacing:.8px;
+                     color:var(--text-secondary); display:flex; align-items:center; gap:7px; }
+.win header .title::before { content:""; width:9px; height:9px; border-radius:99px;
+                             background:var(--music); box-shadow:0 0 9px var(--music-dim); }
+.win header .right { margin-left:auto; color:var(--text-muted); font-size:var(--fs-xs); }
+.tabs { display:flex; gap:2px; }
+.tab { display:flex; align-items:center; gap:6px; padding:4px 11px; border-radius:var(--r-sm);
+       font-size:var(--fs-sm); color:var(--text-muted); cursor:default; }
+.tab .n { font-size:10.5px; padding:0 5px; border-radius:99px; background:var(--bg-inset); color:var(--text-muted); }
+.tab.on { color:var(--text-primary); background:var(--bg-hover); }
+.tab.on .n { background:var(--music-dim); color:var(--music); }
+
+/* 검색바 — whennote와 같은 규칙: 검색창이 유일한 입력이다 */
+.sbar { display:flex; align-items:center; gap:var(--sp-2); padding:10px var(--sp-4) 8px; flex:none; }
+.sbox { flex:1; display:flex; align-items:center; gap:8px; background:var(--bg-inset);
+        border:1px solid var(--border-focus); border-radius:var(--r-sm); padding:6px 10px; }
+.sbox svg { width:13px; height:13px; fill:var(--text-muted); flex:none; }
+.sbox input { all:unset; flex:1; font-family:var(--font-sans); font-size:var(--fs-sm);
+              color:var(--text-primary); }
+.sbox .cho { font-size:10px; font-family:var(--font-mono); color:var(--music);
+             background:var(--music-dim); border-radius:4px; padding:1px 6px; flex:none; }
+.filters { display:flex; gap:4px; padding:0 var(--sp-4) 8px; flex:none; }
+.fchip { font-size:11px; color:var(--text-muted); background:var(--bg-inset);
+         border:1px solid var(--border); border-radius:99px; padding:2px 9px; }
+.fchip.on { color:var(--music); background:var(--music-dim); border-color:transparent; }
+
+/* 시간축 목록 */
+.list { flex:1; overflow:hidden; padding:0 var(--sp-4); }
+.dayhead { display:flex; align-items:center; gap:9px; padding:11px 0 5px; }
+.dayhead b { font-size:var(--fs-xs); color:var(--text-muted); font-weight:640; letter-spacing:.3px; }
+.dayhead i { flex:1; height:1px; background:var(--border); font-style:normal; }
+.dayhead em { font-style:normal; font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono); }
+.row { display:flex; align-items:center; gap:10px; padding:6px 9px; border-radius:var(--r-sm); }
+.row:hover { background:var(--bg-raised); }
+.row.sel { background:var(--music-dim); box-shadow:inset 2px 0 0 var(--music); }
+.row .tm { font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); width:38px; flex:none; }
+.row .meta { flex:1; }
+.row .meta .t { font-size:var(--fs-sm); }
+.row .dur { font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); flex:none; }
+.row mark { background:transparent; color:var(--music); font-weight:650; }
+/* 완주·스킵 — 이 앱의 유일한 암묵 입력이다 */
+.pip { width:5px; height:5px; border-radius:99px; flex:none; background:var(--success); }
+.pip.skip { background:var(--text-muted); }
+.win footer {
+  display:flex; align-items:center; gap:var(--sp-3); padding:7px var(--sp-4);
+  border-top:1px solid var(--border); font-size:var(--fs-xs); color:var(--text-muted); flex:none;
+}
+.win footer .hints { margin-left:auto; display:flex; gap:11px; }
+
+/* 스펙 표 */
+table.spec { border-collapse:collapse; width:100%; max-width:1040px; font-size:12.5px; margin-top:4px; }
+table.spec th, table.spec td { text-align:left; vertical-align:top; padding:7px 12px 7px 0;
+                               border-bottom:1px solid var(--border); }
+table.spec th { color:var(--text-secondary); font-weight:640; font-size:11.5px; white-space:nowrap; }
+table.spec td { color:var(--text-muted); line-height:1.65; }
+table.spec td b { color:var(--text-secondary); font-weight:600; }
+table.spec code { font-family:var(--font-mono); font-size:11px; color:var(--music); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>WHENMUSIC — 미니 플레이어 시안</h1>
+<p class="lede">
+  재생은 남의 앱이 하고 이 앱은 <b>층</b>이 된다. Windows SMTC에서 읽으므로 Spotify든 브라우저 유튜브 탭이든
+  한 줄로 보이고 한 곳에서 제어된다. 아래 넷은 <b>침범 정도</b> 순서다 — 상주 UI의 유일한 설계 변수가 그것이기 때문이다.
+  배경은 전체화면 IDE를 흉내낸 것이고, 실제 오버레이는 <code>focusable:false</code> ·
+  <code>setIgnoreMouseEvents(true,{forward:true})</code>로 포커스를 뺏지 않고 클릭을 통과시킨다(whencalendar와 같은 기법).
+</p>
+
+<h2><span class="n">1</span>상주 형태 4종</h2>
+<p class="sublede">
+  각 시안은 <b>왼쪽이 평소, 오른쪽이 마우스를 올렸을 때</b>다. 평소 상태에서 화면을 얼마나 가져가는지,
+  그리고 <b>곡명을 읽으려고 손을 움직여야 하는지</b>를 보면 된다.
+</p>
+
+<div class="shelf">
+
+  <!-- ─────────── 안 A. 엣지 라인 ─────────── -->
+  <div class="mock">
+    <div class="cap"><b>안 A · 엣지 라인</b><span class="tag">점유 3px</span>
+      <span>최하단에 진행선만. 곡을 알려면 호버해야 한다 — whencalendar 아일랜드 철학을 그대로 계승한 안</span></div>
+    <div class="desk">
+      <div class="tb"><i class="on">store.mjs</i><i>ipc.mjs</i><i>overlay.mjs</i></div>
+      <div class="code"><span class="c">// main/store.mjs — 청취 이력. 내장 SQLite 하나에 쌓는다.</span>
+<span class="k">export function</span> <span class="f">recordPlay</span>(db, s) {
+  <span class="k">const</span> row = db.<span class="f">prepare</span>(<span class="s">'INSERT INTO plays …'</span>);
+  row.<span class="f">run</span>(s.title, s.artist, s.sourceApp, <span class="f">now</span>());
+}</div>
+      <div class="layer">
+        <!-- 평소: 최하단 3px 선. 진행률만 말한다 -->
+        <div style="position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(140,148,160,.18)">
+          <div style="height:100%;width:41%;background:var(--music);box-shadow:0 0 10px var(--music)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>평소 3px.</b> 몰입을 가장 덜 깬다. 대신 <span class="no">곡명이 아예 안 보인다</span> —
+      "지금 뭐가 흐르지"에 답하려면 매번 마우스를 하단으로 내려야 하고, 그건 알트탭보다 조금 나은 수준이다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>안 A · 호버</b><span class="tag">솟아오름 .3s</span>
+      <span>선 위로 필이 솟는다. 마우스가 떠나면 다시 선으로 접힌다</span></div>
+    <div class="desk">
+      <div class="tb"><i class="on">store.mjs</i><i>ipc.mjs</i><i>overlay.mjs</i></div>
+      <div class="code"><span class="c">// main/store.mjs — 청취 이력. 내장 SQLite 하나에 쌓는다.</span>
+<span class="k">export function</span> <span class="f">recordPlay</span>(db, s) {
+  <span class="k">const</span> row = db.<span class="f">prepare</span>(<span class="s">'INSERT INTO plays …'</span>);
+  row.<span class="f">run</span>(s.title, s.artist, s.sourceApp, <span class="f">now</span>());
+}</div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:11px;
+             display:flex;align-items:center;gap:10px;padding:7px 12px 7px 7px;border-radius:20px">
+          <div class="art" style="width:30px;height:30px"></div>
+          <div class="meta" style="max-width:190px">
+            <div class="t">밤편지</div>
+            <div class="a">아이유 · Palette</div>
+          </div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <div class="ctl">
+            <button aria-label="이전 곡"><svg viewBox="0 0 24 24"><path d="M7 6h2v12H7zm3 6l8-6v12z"/></svg></button>
+            <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+            <button aria-label="다음 곡"><svg viewBox="0 0 24 24"><path d="M15 6h2v12h-2zM6 6l8 6-8 6z"/></svg></button>
+          </div>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(140,148,160,.18)">
+          <div style="height:100%;width:41%;background:var(--music);box-shadow:0 0 10px var(--music)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">호버 판정은 <b>하단 44px 띠</b>여야 한다. 3px만 노리게 하면 맞추기 어렵다 —
+      실제 창은 그 띠 높이로 만들고 위쪽은 투명하게 둔다.</div>
+  </div>
+
+  <!-- ─────────── 안 B. 아트 점 ─────────── -->
+  <div class="mock">
+    <div class="cap"><b>안 B · 아트 점</b><span class="tag">36px 원</span>
+      <span>앨범아트만 코너에. 진행률은 아트를 감는 링이 말한다</span></div>
+    <div class="desk">
+      <div class="tb"><i>store.mjs</i><i class="on">smtc.mjs</i><i>overlay.mjs</i></div>
+      <div class="code"><span class="c">// main/smtc.mjs — SMTC 세션 구독. 세션은 재생이 시작돼야 생긴다.</span>
+<span class="k">const</span> mon = <span class="k">new</span> <span class="f">SmtcMonitor</span>();
+mon.<span class="f">on</span>(<span class="s">'session-changed'</span>, (s) =&gt; {
+  overlay.<span class="f">send</span>(<span class="s">'now'</span>, <span class="f">pick</span>(s));
+});</div>
+      <div class="layer">
+        <div style="position:absolute;right:18px;bottom:16px;width:44px;height:44px">
+          <svg viewBox="0 0 44 44" style="position:absolute;inset:0;width:44px;height:44px;overflow:visible">
+            <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(140,148,160,.26)" stroke-width="2.5"/>
+            <circle cx="22" cy="22" r="20" fill="none" stroke="var(--music)" stroke-width="2.5"
+                    stroke-linecap="round" stroke-dasharray="125.6" stroke-dashoffset="74"
+                    transform="rotate(-90 22 22)"/>
+          </svg>
+          <div class="art rd" style="width:34px;height:34px;position:absolute;left:5px;top:5px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>앨범아트가 곧 정보다.</b> 아는 앨범이면 글자 없이도 무슨 곡인지 안다.
+      <span class="no">모르는 앨범이면 아무 말도 하지 않는다</span> — 스트리밍 추천으로 새 곡이 자주 섞이면 약점이 커진다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>안 B · 호버</b><span class="tag">왼쪽으로 펼침</span>
+      <span>점을 축으로 왼쪽으로 늘어난다. 코너라 펼칠 방향이 한쪽뿐이다</span></div>
+    <div class="desk">
+      <div class="tb"><i>store.mjs</i><i class="on">smtc.mjs</i><i>overlay.mjs</i></div>
+      <div class="code"><span class="c">// main/smtc.mjs — SMTC 세션 구독. 세션은 재생이 시작돼야 생긴다.</span>
+<span class="k">const</span> mon = <span class="k">new</span> <span class="f">SmtcMonitor</span>();
+mon.<span class="f">on</span>(<span class="s">'session-changed'</span>, (s) =&gt; {
+  overlay.<span class="f">send</span>(<span class="s">'now'</span>, <span class="f">pick</span>(s));
+});</div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:14px;display:flex;align-items:center;
+             gap:10px;padding:5px 5px 5px 13px;border-radius:99px">
+          <div class="ctl">
+            <button aria-label="이전 곡"><svg viewBox="0 0 24 24"><path d="M7 6h2v12H7zm3 6l8-6v12z"/></svg></button>
+            <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+            <button aria-label="다음 곡"><svg viewBox="0 0 24 24"><path d="M15 6h2v12h-2zM6 6l8 6-8 6z"/></svg></button>
+          </div>
+          <div class="meta" style="max-width:150px;text-align:right">
+            <div class="t">밤편지</div>
+            <div class="a">아이유</div>
+          </div>
+          <div style="position:relative;width:44px;height:44px;flex:none">
+            <svg viewBox="0 0 44 44" style="position:absolute;inset:0;width:44px;height:44px;overflow:visible">
+              <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(140,148,160,.26)" stroke-width="2.5"/>
+              <circle cx="22" cy="22" r="20" fill="none" stroke="var(--music)" stroke-width="2.5"
+                      stroke-linecap="round" stroke-dasharray="125.6" stroke-dashoffset="74"
+                      transform="rotate(-90 22 22)"/>
+            </svg>
+            <div class="art rd" style="width:34px;height:34px;position:absolute;left:5px;top:5px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">컨트롤이 <b>왼쪽 끝</b>으로 밀린다. 손은 점 위에 있는데 버튼은 멀다 —
+      호버 후 마우스 이동 거리가 안 C보다 길다.</div>
+  </div>
+
+  <!-- ─────────── 안 C. 하단 필 ─────────── -->
+  <div class="mock">
+    <div class="cap"><b>안 C · 하단 필</b><span class="tag">점유 40px</span>
+      <span>항상 읽힌다. 아트 26 + 곡·아티스트 + 소스 배지, 진행바는 필 안쪽 밑선</span></div>
+    <div class="desk">
+      <div class="tb"><i>store.mjs</i><i>smtc.mjs</i><i class="on">overlay.mjs</i></div>
+      <div class="code"><span class="c">// main/overlay.mjs — 하단 필. 포커스를 뺏지 않는다.</span>
+win.<span class="f">setIgnoreMouseEvents</span>(<span class="k">true</span>, { forward: <span class="k">true</span> });
+win.<span class="f">setVisibleOnAllWorkspaces</span>(<span class="k">true</span>, {
+  visibleOnFullScreen: <span class="k">true</span>,
+});</div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 13px 7px 5px;border-radius:19px">
+          <div class="art" style="width:26px;height:26px"></div>
+          <div class="meta" style="max-width:200px">
+            <div class="t" style="font-size:12px">밤편지</div>
+            <div class="a" style="font-size:10.5px">아이유</div>
+          </div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <div class="bar" style="position:absolute;left:12px;right:12px;bottom:3px">
+            <i style="width:41%"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>눈만 내리면 읽힌다.</b> 손을 쓰지 않고 "지금 뭐가 흐르지"가 해결되는 유일한 안이다.
+      화면 하단 40px를 상시로 가져가는 값을 치른다 — 다만 그 자리는 대개 작업표시줄과 IDE 상태바가 있는
+      <span class="yes">이미 정보용으로 양보된 띠</span>다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>안 C · 호버</b><span class="tag">폭만 늘어남</span>
+      <span>컨트롤이 오른쪽에 붙고 시간이 나온다. 위치는 그대로 — 손이 이미 그 위에 있다</span></div>
+    <div class="desk">
+      <div class="tb"><i>store.mjs</i><i>smtc.mjs</i><i class="on">overlay.mjs</i></div>
+      <div class="code"><span class="c">// main/overlay.mjs — 하단 필. 포커스를 뺏지 않는다.</span>
+win.<span class="f">setIgnoreMouseEvents</span>(<span class="k">true</span>, { forward: <span class="k">true</span> });
+win.<span class="f">setVisibleOnAllWorkspaces</span>(<span class="k">true</span>, {
+  visibleOnFullScreen: <span class="k">true</span>,
+});</div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 7px 7px 5px;border-radius:19px">
+          <div class="art" style="width:26px;height:26px"></div>
+          <div class="meta" style="max-width:200px">
+            <div class="t" style="font-size:12px">밤편지</div>
+            <div class="a" style="font-size:10.5px">아이유 · Palette</div>
+          </div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);flex:none">1:47 / 4:18</span>
+          <div class="ctl">
+            <button aria-label="이전 곡"><svg viewBox="0 0 24 24"><path d="M7 6h2v12H7zm3 6l8-6v12z"/></svg></button>
+            <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+            <button aria-label="다음 곡"><svg viewBox="0 0 24 24"><path d="M15 6h2v12h-2zM6 6l8 6-8 6z"/></svg></button>
+          </div>
+          <div class="bar" style="position:absolute;left:12px;right:12px;bottom:3px">
+            <i style="width:41%"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">호버해도 <b>왼쪽 끝이 움직이지 않는다</b>(transform 대신 폭만 늘린다) —
+      읽던 곡명이 자리를 옮기면 눈이 다시 찾아야 한다.</div>
+  </div>
+
+  <!-- ─────────── 안 D. 코너 카드 ─────────── -->
+  <div class="mock">
+    <div class="cap"><b>안 D · 코너 카드</b><span class="tag">236×92</span>
+      <span>정보가 가장 많다. 아트 52 + 컨트롤 상시 노출 + 시크 가능한 진행바</span></div>
+    <div class="desk">
+      <div class="tb"><i>store.mjs</i><i>smtc.mjs</i><i class="on">history.mjs</i></div>
+      <div class="code"><span class="c">// main/history.mjs — 초성 인덱스. whennote/search.mjs를 이식한다.</span>
+<span class="k">import</span> { toChoseong } <span class="k">from</span> <span class="s">'./search.mjs'</span>;
+<span class="c">// '아이유' → 'ㅇㅇㅇ' — UTF-16 단위로 1:1이라 인덱스가 보존된다</span>
+db.<span class="f">run</span>(<span class="s">'UPDATE plays SET title_cho=? WHERE id=?'</span>, …);</div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:16px;width:236px;
+             border-radius:var(--r-md);padding:10px 11px 9px;white-space:normal">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="art" style="width:52px;height:52px;border-radius:var(--r-sm)"></div>
+            <div style="min-width:0;flex:1">
+              <div class="meta">
+                <div class="t">밤편지</div>
+                <div class="a">아이유 · Palette</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+                <span class="src sp" style="font-size:9.5px"><span class="d"></span>Spotify</span>
+                <div class="ctl" style="margin-left:auto">
+                  <button aria-label="이전 곡"><svg viewBox="0 0 24 24"><path d="M7 6h2v12H7zm3 6l8-6v12z"/></svg></button>
+                  <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+                  <button aria-label="다음 곡"><svg viewBox="0 0 24 24"><path d="M15 6h2v12h-2zM6 6l8 6-8 6z"/></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">1:47</span>
+            <div class="bar" style="flex:1;height:3px"><i style="width:41%"></i></div>
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">4:18</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">클릭 목표가 커서 <b>조작이 가장 편하다.</b> 그러나
+      <span class="no">평소에 이미 다 펼쳐져 있어 접을 것이 없다</span> — 상주하는 내내 92px 높이가 화면에 남고,
+      whencalendar의 "평소엔 점 하나" 원칙과 정면으로 어긋난다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>안 D · 자동 축소</b><span class="tag">비활성 8초 후</span>
+      <span>조작이 없으면 카드가 아트 점으로 줄어든다 — 안 D와 안 B를 시간으로 잇는 변형</span></div>
+    <div class="desk">
+      <div class="tb"><i>store.mjs</i><i>smtc.mjs</i><i class="on">history.mjs</i></div>
+      <div class="code"><span class="c">// main/history.mjs — 초성 인덱스. whennote/search.mjs를 이식한다.</span>
+<span class="k">import</span> { toChoseong } <span class="k">from</span> <span class="s">'./search.mjs'</span>;
+<span class="c">// '아이유' → 'ㅇㅇㅇ' — UTF-16 단위로 1:1이라 인덱스가 보존된다</span>
+db.<span class="f">run</span>(<span class="s">'UPDATE plays SET title_cho=? WHERE id=?'</span>, …);</div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:16px;display:flex;align-items:center;
+             gap:8px;padding:5px 11px 5px 5px;border-radius:99px;opacity:.82">
+          <div style="position:relative;width:40px;height:40px;flex:none">
+            <svg viewBox="0 0 40 40" style="position:absolute;inset:0;width:40px;height:40px;overflow:visible">
+              <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(140,148,160,.26)" stroke-width="2.5"/>
+              <circle cx="20" cy="20" r="18" fill="none" stroke="var(--music)" stroke-width="2.5"
+                      stroke-linecap="round" stroke-dasharray="113" stroke-dashoffset="67"
+                      transform="rotate(-90 20 20)"/>
+            </svg>
+            <div class="art rd" style="width:31px;height:31px;position:absolute;left:4.5px;top:4.5px"></div>
+          </div>
+          <div class="meta" style="max-width:120px">
+            <div class="t" style="font-size:11.5px">밤편지</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>침범을 시간으로 조절한다.</b> 곡이 바뀌는 순간과 조작 직후에만 펼쳐지고
+      나머지 시간엔 점으로 산다. 구현은 넷 중 가장 복잡하다 — 펼침·접힘 상태와 SMTC 이벤트가 엉킨다.</div>
+  </div>
+
+</div>
+
+<h2><span class="n">2</span>상태 8종 — 안 C로 전개</h2>
+<p class="sublede">
+  상주 앱은 <b>정상 상태보다 비정상 상태에서 평가된다.</b> 특히 앞의 셋은 이 앱에서만 생기는 상태다 —
+  SMTC 세션은 <b>재생이 시작돼야 비로소 생기고</b>, 네이티브 애드온은 Windows 10 1809 미만이나 ABI 불일치에서 실패하고,
+  회의는 마이크 점유로만 알 수 있다.
+</p>
+
+<div class="shelf tight">
+
+  <div class="mock">
+    <div class="cap"><b>① 재생 중</b><span class="tag">기본</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 기준 상태</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 13px 7px 5px;border-radius:19px">
+          <div class="art" style="width:26px;height:26px"></div>
+          <div class="meta" style="max-width:170px">
+            <div class="t" style="font-size:12px">밤편지</div>
+            <div class="a" style="font-size:10.5px">아이유</div>
+          </div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <div class="bar" style="position:absolute;left:12px;right:12px;bottom:3px"><i style="width:41%"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>② 일시정지</b><span class="tag">사용자가 멈춤</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 진행바가 색을 잃고 아트가 가라앉는다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 13px 7px 5px;border-radius:19px;opacity:.72">
+          <div class="art" style="width:26px;height:26px;filter:saturate(.35)"></div>
+          <div class="meta" style="max-width:170px">
+            <div class="t" style="font-size:12px;color:var(--text-secondary)">밤편지</div>
+            <div class="a" style="font-size:10.5px">아이유</div>
+          </div>
+          <span class="src sp" style="opacity:.7"><span class="d"></span>Spotify</span>
+          <div class="bar idle" style="position:absolute;left:12px;right:12px;bottom:3px"><i style="width:41%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">멈춘 것을 <b>색의 부재</b>로 말한다. 일시정지 아이콘을 띄우지 않는다 —
+      평소에 아이콘이 없으니 대비가 생기지 않는다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>③ 회의 자동 일시정지</b><span class="tag">--warning</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// HKCU\…\ConsentStore\microphone — LastUsedTimeStop == 0</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 13px 7px 5px;border-radius:19px;
+             border-color:rgba(224,175,104,.34)">
+          <div class="art" style="width:26px;height:26px;filter:saturate(.3)"></div>
+          <div class="meta" style="max-width:190px">
+            <div class="t" style="font-size:12px;color:var(--warning)">회의 중 — 멈췄습니다</div>
+            <div class="a" style="font-size:10.5px">Teams가 마이크 사용 중 · 끝나면 이어서</div>
+          </div>
+          <div class="bar warn" style="position:absolute;left:12px;right:12px;bottom:3px"><i style="width:41%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">이때만 <b>곡명 자리를 문장이 차지한다.</b> 사용자가 멈추지 않았는데 멈췄으므로,
+      <span class="yes">왜 멈췄는지를 먼저 말해야</span> 오작동으로 읽히지 않는다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>④ 세션 둘</b><span class="tag">대상 전환</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// Spotify + Chrome 유튜브 탭이 동시에 세션을 갖는다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 9px 7px 5px;border-radius:19px">
+          <div class="art" style="width:26px;height:26px"></div>
+          <div class="meta" style="max-width:150px">
+            <div class="t" style="font-size:12px">밤편지</div>
+            <div class="a" style="font-size:10.5px">아이유</div>
+          </div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <span style="width:1px;height:16px;background:var(--border);flex:none"></span>
+          <span class="src br" style="opacity:.55"><span class="d"></span>Chrome</span>
+          <div class="bar" style="position:absolute;left:12px;right:12px;bottom:3px"><i style="width:41%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">흐릿한 배지가 <b>대기 중인 다른 세션</b>이다. 클릭하면 제어 대상이 그쪽으로 옮겨간다 —
+      유튜브 탭 대신 Spotify를 스킵하게 하는 것이 SMTC를 쓰는 이유 중 하나다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>⑤ 앨범아트 없음</b><span class="tag">폴백</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 로컬 파일·라디오 스트림은 썸네일이 비어 온다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:9px;padding:5px 13px 7px 5px;border-radius:19px">
+          <div class="art none" style="width:26px;height:26px"><b>♪</b></div>
+          <div class="meta" style="max-width:190px">
+            <div class="t" style="font-size:12px">Lofi Girl — beats to relax</div>
+            <div class="a" style="font-size:10.5px">radio stream</div>
+          </div>
+          <span class="src br"><span class="d"></span>Chrome</span>
+          <div class="bar" style="position:absolute;left:12px;right:12px;bottom:3px"><i style="width:0%"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">길이를 모르는 스트림은 <b>진행바를 0으로 두지 않고 숨긴다</b>(여기선 비교용으로 남겼다).
+      0%로 멈춰 있는 바는 고장으로 읽힌다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>⑥ 빈 상태</b><span class="tag">세션 없음</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 앱을 막 켠 직후 — 아직 아무것도 재생하지 않았다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:8px;padding:5px 13px;border-radius:19px;opacity:.5">
+          <span style="width:7px;height:7px;border-radius:99px;background:var(--text-muted);flex:none"></span>
+          <span style="font-size:11px;color:var(--text-muted)">어디서든 재생을 시작하면 잡힙니다</span>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>이 상태가 이 앱의 첫인상이다.</b> SMTC 세션은 재생이 시작돼야 생기므로 설치 직후엔 반드시 빈다.
+      기본값은 <b>이 안내를 8초 보여준 뒤 완전히 사라지는 것</b> — 아무것도 없는데 자리를 지키고 있으면 고장으로 읽힌다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>⑦ 로딩</b><span class="tag">애드온 초기화</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 네이티브 애드온 로드 — 보통 100ms 안이라 거의 안 보인다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:8px;padding:5px 13px;border-radius:19px;opacity:.6">
+          <span style="width:7px;height:7px;border-radius:99px;background:var(--music);flex:none;
+                       box-shadow:0 0 8px var(--music)"></span>
+          <span style="font-size:11px;color:var(--text-muted)">미디어 세션 연결 중…</span>
+        </div>
+      </div>
+    </div>
+    <div class="note">점이 1.1초 주기로 깜빡인다(whencalendar <code>.led.load</code>와 같은 키프레임).
+      <b>300ms 안에 끝나면 아예 그리지 않는다</b> — 깜빡임 한 번은 로딩이 아니라 결함처럼 보인다.</div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>⑧ 에러</b><span class="tag">--danger</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// Windows 10 1809 미만 · ABI 불일치 · 애드온 누락</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;left:50%;transform:translateX(-50%);bottom:16px;
+             display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:19px;
+             border-color:rgba(247,118,142,.34)">
+          <span style="width:7px;height:7px;border-radius:99px;background:var(--danger);flex:none"></span>
+          <div class="meta">
+            <div class="t" style="font-size:11.5px;color:var(--danger)">미디어 세션을 읽을 수 없습니다</div>
+            <div class="a" style="font-size:10.5px">Windows 10 1809 이상이 필요합니다 · 자세히</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">이 앱은 <b>실패하면 할 수 있는 일이 하나도 없다</b> — 재생 장치가 아니기 때문이다.
+      그래서 에러는 조용히 숨기지 않고 <span class="yes">원인과 필요 조건을 한 줄로 말한다.</span>
+      이력 창은 그래도 열린다(이미 쌓인 기록은 읽을 수 있다).</div>
+  </div>
+
+</div>
+
+<h2><span class="n">3</span>본체 창 — 이력</h2>
+<p class="sublede">
+  <kbd>Ctrl+Alt+P</kbd>로 열린다. 여는 이유는 하나뿐이다 — <b>"아까 그거 뭐였지."</b>
+  검색창이 유일한 입력이고(whennote 규칙), 초성 모듈은 <code>whennote/main/search.mjs</code>를 그대로 이식한다.
+  아래는 <code>ㅇㅇ</code>를 입력한 상태 — 초성 질의로 인식되어 <b>아이유·아이브·악뮤</b>가 함께 잡혔다.
+</p>
+
+<div class="shelf">
+  <div class="mock">
+    <div class="cap"><b>이력 · 초성 검색</b><span class="tag">780×560</span>
+      <span>시간축으로만 쌓인다. 폴더도 플레이리스트도 없다</span></div>
+    <div class="win">
+      <header>
+        <span class="title">WHENMUSIC</span>
+        <div class="tabs">
+          <div class="tab on">이력 <span class="n">2,418</span></div>
+          <div class="tab">자주 <span class="n">96</span></div>
+          <div class="tab">설정</div>
+        </div>
+        <span class="right">9월 18일 목</span>
+      </header>
+
+      <div class="sbar">
+        <div class="sbox">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 119.5 5a4.5 4.5 0 010 9z"/></svg>
+          <input value="ㅇㅇ" readonly aria-label="곡·아티스트 검색">
+          <span class="cho">초성</span>
+        </div>
+      </div>
+      <div class="filters">
+        <span class="fchip on">전체</span>
+        <span class="fchip">Spotify</span>
+        <span class="fchip">Chrome</span>
+        <span class="fchip">완주만</span>
+      </div>
+
+      <div class="list">
+        <div class="dayhead"><b>오늘</b><i></i><em>3시간 12분 · 42곡</em></div>
+        <div class="row sel">
+          <span class="tm">14:31</span><span class="pip"></span>
+          <div class="art" style="width:24px;height:24px"></div>
+          <div class="meta"><div class="t">밤편지</div><div class="a"><mark>아이유</mark> · Palette</div></div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <span class="dur">4:18</span>
+        </div>
+        <div class="row">
+          <span class="tm">14:26</span><span class="pip skip"></span>
+          <div class="art b" style="width:24px;height:24px"></div>
+          <div class="meta"><div class="t">LOVE DIVE</div><div class="a"><mark>아이브</mark></div></div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <span class="dur">0:41</span>
+        </div>
+        <div class="row">
+          <span class="tm">13:58</span><span class="pip"></span>
+          <div class="art none" style="width:24px;height:24px"><b>♪</b></div>
+          <div class="meta"><div class="t">어떻게 이별까지 사랑하겠어</div><div class="a"><mark>악뮤</mark> · 항해</div></div>
+          <span class="src br"><span class="d"></span>Chrome</span>
+          <span class="dur">4:02</span>
+        </div>
+        <div class="dayhead"><b>어제</b><i></i><em>1시간 47분 · 26곡</em></div>
+        <div class="row">
+          <span class="tm">21:04</span><span class="pip"></span>
+          <div class="art" style="width:24px;height:24px"></div>
+          <div class="meta"><div class="t">에잇</div><div class="a"><mark>아이유</mark> · 에잇</div></div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <span class="dur">2:47</span>
+        </div>
+        <div class="row">
+          <span class="tm">20:52</span><span class="pip skip"></span>
+          <div class="art b" style="width:24px;height:24px"></div>
+          <div class="meta"><div class="t">After LIKE</div><div class="a"><mark>아이브</mark></div></div>
+          <span class="src sp"><span class="d"></span>Spotify</span>
+          <span class="dur">1:12</span>
+        </div>
+      </div>
+
+      <footer>
+        <span>초록 점 = 끝까지 들음 · 회색 = 건너뜀</span>
+        <span class="hints">
+          <span><kbd>/</kbd> 검색</span><span><kbd>Enter</kbd> 이 곡 다시</span><span><kbd>Esc</kbd> 닫기</span>
+        </span>
+      </footer>
+    </div>
+    <div class="note">
+      <b>완주·스킵 점이 이 앱의 유일한 암묵 입력이다.</b> 좋아요·별점을 만들지 않는다 —
+      whenwork가 증명한 것이 "이미 끝난 일의 이중 장부는 아무도 하지 않는다"였다.
+      <kbd>Enter</kbd>는 그 곡을 원래 앱에서 다시 재생한다 — 자체 재생 장치가 없으므로
+      <span class="no">Spotify 곡은 URI 핸들러로 넘기는 것까지가 한계</span>이고, 이건 오픈이슈다.
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">4</span>스펙·핸드오프 노트</h2>
+<table class="spec">
+  <tr><th style="width:120px">토큰</th>
+      <td><code>--music #bb9af7</code> · <code>--music-dim rgba(187,154,247,.14)</code> 두 개만 추가한다.
+          나머지는 형제 앱 <code>renderer/tokens.css</code> 그대로 복사한다 — 단일 원본은 그쪽이다.</td></tr>
+  <tr><th>오버레이 창</th>
+      <td>안 C 채택 시 <b>폭 560 · 높이 56</b>(하단 호버 띠 포함), 하단 중앙 배치.
+          <code>frame:false · transparent · focusable:false · skipTaskbar · alwaysOnTop</code>,
+          <code>setIgnoreMouseEvents(true,{forward:true})</code>로 클릭 통과 + 호버만 수신.
+          z-order는 1초마다 다시 잡는다 — 없으면 전체화면 앱이 나중에 뜰 때 가려진다(whencalendar D-14와 동일).</td></tr>
+  <tr><th>모션</th>
+      <td>호버 확장 <b>.28s cubic-bezier(.2,.9,.3,1)</b>, 곡 전환 시 아트·글자 크로스페이드 <b>.2s</b>.
+          진행바는 <code>transition:none</code> — 1초마다 갱신되는 값에 이징을 걸면 떨린다.
+          맥동·발광 애니메이션은 쓰지 않는다. 그건 whencalendar의 언어이고, 음악은 급한 일이 아니다.</td></tr>
+  <tr><th>접근성</th>
+      <td>오버레이는 <code>focusable:false</code>라 <b>스크린리더·키보드가 닿지 않는다</b> —
+          그래서 모든 조작에 대응하는 경로가 본체 창과 미디어 키에 반드시 있어야 한다.
+          본문 대비는 <code>--text-primary</code> on <code>--ov-bg</code> ≈ 13:1,
+          보조 <code>--text-muted</code> ≈ 4.6:1로 AA를 넘긴다. 컨트롤 버튼은 24px이지만
+          호버 판정 영역은 <b>32px</b>로 넓힌다. 상태를 색으로만 말하지 않는다 —
+          ③은 문장, ⑧은 문장, ②는 투명도까지 함께 바뀐다.</td></tr>
+  <tr><th>단축키</th>
+      <td><kbd>Ctrl+Alt+P</kbd> 이력 창(형제 앱과 충돌 없음: whenwork <kbd>Ctrl+Alt+Space</kbd>,
+          whennote <kbd>Ctrl+Alt+M</kbd>·<kbd>N</kbd>, whencalendar <kbd>Ctrl+Alt+C</kbd>).
+          재생·스킵은 <b>전역 단축키를 새로 만들지 않는다</b> — 키보드 미디어 키가 이미 SMTC를 타고 있다.</td></tr>
+  <tr><th>남은 결정</th>
+      <td><b>1)</b> 안 A~D 중 무엇으로 갈지. <b>2)</b> 오버레이 위치를 고정할지 사용자 지정으로 둘지
+          (whencalendar가 상단 중앙을 쓰므로 <b>하단</b>이 안전하다). <b>3)</b> 이력에서 <kbd>Enter</kbd>가
+          곡을 되살리는 방법 — 자체 재생기가 없으니 소스 앱 URI에 의존한다.</td></tr>
+</table>
+
+<h2><span class="n">5</span>실측 반영 — 유튜브 플레이리스트를 들을 때의 D안</h2>
+<p class="sublede">
+  2026-09-18 이 PC에서 SMTC를 직접 찍은 결과다. <b>§1~4는 "곡"이 온다고 가정했지만 실제로는 오지 않는다</b> —
+  주 사용자는 1시간짜리 믹스 영상을 듣고, SMTC가 아는 한 곡은 그 영상 전체다.
+  아래 왼쪽이 <b>실측값을 그대로 넣은 D안</b>이고, 가운데가 그래서 필요해지는 <b>구간 도장</b>,
+  오른쪽이 <code>music.youtube.com</code>으로 들을 때의 비교다.
+</p>
+
+<div class="shelf tight">
+
+  <div class="mock">
+    <div class="cap"><b>실측 ① 있는 그대로</b><span class="tag">그대로 그리면</span>
+      <span>SMTC가 준 값을 손대지 않고 D안 카드에 넣은 모습</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// TITLE = 영상 제목 · ARTIST = 채널명 · 1:02:11</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:14px;width:248px;
+             border-radius:var(--r-md);padding:10px 11px 9px;white-space:normal">
+          <div style="display:flex;gap:10px;align-items:center">
+            <!-- 실측: PNG 150×83. 정사각이 아니라 16:9 영상 썸네일이다 -->
+            <div class="art b" style="width:84px;height:47px;border-radius:var(--r-sm)"></div>
+            <div style="min-width:0;flex:1">
+              <div class="meta">
+                <div class="t" style="white-space:normal;line-height:1.35;font-size:11.5px">[𝐏𝐥𝐚𝐲𝐥𝐢𝐬𝐭] 우연히 듣고…</div>
+                <div class="a">𝐂𝐡𝐞𝐫𝐫𝐲𝐌𝐢𝐱</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">44:17</span>
+            <div class="bar" style="flex:1;height:3px"><i style="width:71%"></i></div>
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">1:02:11</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="no">아트가 정사각이 아니다 — 실측 150×83, 16:9 영상 썸네일이고 내용은 채널 커버 사진이다.</span>
+      곡과 아무 관계가 없으므로 <b>정보 슬롯의 가장 큰 자리를 정보가 아닌 것이 차지한다.</b>
+      제목은 꺾이고, 아티스트 자리에는 채널명이, 진행바 71%는 "이 믹스의 71%"라 의미가 없다.
+      <b>곡이 바뀌어도 카드는 한 시간 동안 그대로다.</b>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>실측 ② 배경으로 내리기</b><span class="tag">추천</span>
+      <span>16:9 썸네일을 정보 슬롯에서 빼서 배경으로 깔고, 글자를 전면에 세운다</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 아트는 분위기만 담당. 읽을 것은 글자뿐이다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:14px;width:248px;
+             border-radius:var(--r-md);padding:11px 12px 10px;white-space:normal;overflow:hidden">
+          <!-- 썸네일을 blur해서 깐다. 16:9든 정사각이든 어떤 비율이 와도 깨지지 않는다 -->
+          <div style="position:absolute;inset:0;background:linear-gradient(135deg,#8c5b3b,#6b4a2a 60%,#3b3b5b);
+                      filter:blur(16px);transform:scale(1.4);opacity:.55"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.95),rgba(18,21,27,.72))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t" style="white-space:normal;line-height:1.38;font-size:12px">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+              <span class="src br" style="font-size:9.5px"><span class="d"></span>Chrome</span>
+              <div class="ctl" style="margin-left:auto">
+                <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+                <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+                <button aria-label="도장 찍기"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:8px">
+              <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">44:17</span>
+              <div class="bar" style="flex:1;height:3px"><i style="width:71%"></i></div>
+              <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>읽을 것이 글자만 남는다.</b> 어떤 비율의 이미지가 와도(16:9 썸네일이든 정사각 앨범 커버든)
+      레이아웃이 흔들리지 않고, 아트가 아예 없어도 같은 모습이다 —
+      <span class="yes">§2 ⑤의 폴백 상태가 따로 필요 없어진다.</span>
+      제목의 유니코드 볼드는 NFKC로 정규화해 평문으로 되돌렸다. 세 번째 버튼이 도장이다.
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>실측 ② 구간 도장</b><span class="tag">Ctrl+Alt+S</span>
+      <span>곡을 식별하는 대신 순간을 저장한다. 되찾기는 나중에</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 이 믹스의 10:32 지점에 도장 → 나중에 &amp;t=632s</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:14px;width:248px;
+             border-radius:var(--r-md);padding:10px 11px 9px;white-space:normal;
+             border-color:rgba(187,154,247,.42)">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="art b" style="width:52px;height:52px;border-radius:var(--r-sm)"></div>
+            <div style="min-width:0;flex:1">
+              <div class="meta">
+                <div class="t" style="font-size:12px;color:var(--music)">10:32에 표시했습니다</div>
+                <div class="a" style="white-space:normal;line-height:1.35">𝐂𝐡𝐞𝐫𝐫𝐲𝐌𝐢𝐱 믹스 · 오늘 3번째</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+                <span class="src br" style="font-size:9.5px"><span class="d"></span>Chrome</span>
+                <span style="font-size:9.5px;color:var(--text-muted);margin-left:auto">되돌아가기 <b style="color:var(--text-secondary)">Enter</b></span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:9px;position:relative">
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">10:32</span>
+            <div class="bar" style="flex:1;height:3px;position:relative;overflow:visible">
+              <i style="width:17%"></i>
+              <!-- 도장 자리. 같은 영상에 여러 개 찍힌다 -->
+              <span style="position:absolute;left:17%;top:-3px;width:2px;height:9px;background:var(--music);
+                           box-shadow:0 0 6px var(--music)"></span>
+              <span style="position:absolute;left:6%;top:-2px;width:2px;height:7px;background:rgba(187,154,247,.45)"></span>
+              <span style="position:absolute;left:11%;top:-2px;width:2px;height:7px;background:rgba(187,154,247,.45)"></span>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">1:02:11</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>단축키 한 번, 확인 1.5초, 끝.</b> 몰입을 끊지 않는다. 진행바에 남은 흐린 눈금이 같은 믹스에
+      앞서 찍은 도장들이다. <span class="yes">되돌아가기는 URL에 <code>&amp;t=632s</code>를 붙이면 정확히 그 지점</span>이고,
+      거기서 곡이 뭔지는 유튜브가 알려준다 — <b>이 앱이 곡을 알아낼 필요가 없어진다.</b>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>비교 ③ music.youtube.com</b><span class="tag">곡 단위</span>
+      <span>같은 SMTC인데 곡이 온다. 대신 Chrome이 아트·아티스트를 버린다는 보고가 있다</span></div>
+    <div class="desk short">
+      <div class="code"><span class="c">// 곡 단위 메타데이터. 단 아트가 NULL로 올 수 있다</span></div>
+      <div class="layer">
+        <div class="ov" style="position:absolute;right:16px;bottom:14px;width:248px;
+             border-radius:var(--r-md);padding:10px 11px 9px;white-space:normal">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="art none" style="width:52px;height:52px;border-radius:var(--r-sm)"><b>♪</b></div>
+            <div style="min-width:0;flex:1">
+              <div class="meta">
+                <div class="t">밤편지</div>
+                <div class="a">아이유 — <span style="color:var(--warning)">아트 없음</span></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+                <span class="src br" style="font-size:9.5px"><span class="d"></span>Chrome</span>
+                <span style="font-size:9.5px;color:var(--text-muted);margin-left:auto">iTunes에서 보완 가능</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">1:47</span>
+            <div class="bar" style="flex:1;height:3px"><i style="width:41%"></i></div>
+            <span style="font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted)">4:18</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      곡 단위 이력이 제대로 쌓이는 유일한 경로다. 아트가 비면 <b>제목·아티스트로 iTunes Search API</b>
+      (키 불필요)에서 채울 수 있다 — 계정도 구독도 없으니 "설치 파일 하나"를 깨지 않는다.
+      <span class="no">단, 사용자의 청취 습관을 바꾸라고 요구하는 안이다.</span>
+    </div>
+  </div>
+
+</div>
+
+<h2><span class="n">6</span>실측 로그</h2>
+<table class="spec">
+  <tr><th style="width:150px">OS</th><td><code>10.0.26200</code> · Windows 11 Pro. SMTC 요구선(10.0.17763 / 1809)을 한참 넘는다</td></tr>
+  <tr><th>세션</th><td><code>1</code>개 · AUMID <code>Chrome</code> ·
+      <b>AUMID가 브라우저까지만 말한다</b> — 유튜브 탭인지 회의 탭인지 구분하지 못한다</td></tr>
+  <tr><th>제어 가능</th><td>pause <code>True</code> · next <code>True</code> · prev <code>True</code> ·
+      <b>seek <code>True</code></b> — 되돌아가기를 SMTC로 직접 할 수 있다는 뜻이다(URL 없이도)</td></tr>
+  <tr><th>메타데이터</th><td>TITLE·ARTIST·THUMBNAIL 있음 / ALBUM·ALBUM ARTIST·SUBTITLE·GENRES <b>전부 빈 값</b>.
+      챕터 정보는 오지 않는다 — 믹스 안의 트랙 구분을 SMTC에서 얻을 길이 없다</td></tr>
+  <tr><th>썸네일</th><td><b>PNG 150×83 · 23.2 KB</b>(napi POC 실측). 정사각이 아니라 <b>16:9 영상 썸네일</b>이고
+      내용은 채널 커버 사진이다 — 앨범아트가 아니다. 그래서 실측 ②가 아트를 배경으로 내린다</td></tr>
+  <tr><th>Node 애드온</th><td><code>@coooookies/windows-smtc-monitor@1.0.12</code> — 읽기·이벤트는 정상.
+      <b>제어 메서드는 없다</b>(읽기 전용 라이브러리). Electron에서는 <b>Worker thread 필수</b> —
+      메인·렌더러에서 직접 쓰면 프리징한다. 썸네일은 Buffer로 온다</td></tr>
+  <tr><th>제어 경로</th><td>애드온에 없으므로 <b>가상 미디어 키 주입</b>으로 검증했다 —
+      <code>keybd_event(VK_MEDIA_PLAY_PAUSE)</code> 한 번에 브라우저 세션이 PLAYING → PAUSED → PLAYING으로 반응했다.
+      <span style="color:var(--danger)">대상 지정이 불가능</span>하다 — 키는 Windows가 고른 현재 세션으로 간다.
+      세션이 여럿이면 원하는 앱을 겨눌 수 없으므로, §2 ④의 대상 전환 UI는 이 경로로는 만들 수 없다</td></tr>
+  <tr><th>position</th><td><b>재생 중에 갱신되지 않는다.</b> 3초 뒤에도 같은 값이고, 실측에서 기준값이
+      <b>4분(242초)까지 낡아 있었다</b>. 상태가 바뀌는 순간에만 갱신된다 —
+      일시정지를 찍자 <code>2415.39s → 2657.51s</code>로 점프하고 <code>timeline-changed</code>가 함께 왔다.
+      따라서 <b>PLAYING 이벤트 시각과 그때의 position을 기준점으로 삼아 앱이 직접 보간</b>해야 한다.
+      앱을 켰을 때 이미 재생 중이면 기준점이 낡은 상태이므로, 그 세션은 첫 상태 변화까지 위치를 신뢰할 수 없다</td></tr>
+  <tr><th>이벤트</th><td>재생 중 8초간 <b>0건</b>(위치가 안 변하니 올 것이 없다). 상태 변화 시엔 정상 수신.
+      단 <code>playback-changed</code>가 <b>같은 상태로 두 번</b> 왔다 — 디바운스가 필요하다</td></tr>
+  <tr><th>탭 URL</th><td>UI Automation으로 <b>확장 없이 읽힌다</b>(주소창 Edit 컨트롤의 ValuePattern).
+      실측 <code>gowork.oz4cs.com/lab/planning</code>. <span style="color:var(--danger)">활성 탭만</span> —
+      음악이 백그라운드 탭이면 못 읽으므로 도장의 URL 복원은 폴백이 필요하다</td></tr>
+  <tr><th>정규화</th><td>제목에 <code>𝐏𝐥𝐚𝐲𝐥𝐢𝐬𝐭</code>(유니코드 수학 볼드)·이모지·전각 <code>｜</code>가 섞인다.
+      <b>NFKC 정규화</b> 없이는 검색이 걸리지 않는다</td></tr>
+</table>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>WHENMUSIC — 코너 카드 변형안</title>
+<style>
+/* ────────────────────────────────────────────────────────────
+   WHENMUSIC 코너 카드 변형안. 확정된 전제로만 그린다:
+     · 안 D(코너 카드) 채택
+     · 소스는 브라우저 유튜브의 1시간 믹스 — 곡 단위 정보가 오지 않는다
+     · 썸네일은 PNG 150×83(16:9) · 곡과 무관한 채널 커버
+     · 제어는 SMTC 세션 직접 명령 — 대상 지정과 절대 시크 모두 가능(실측)
+     · 그래서 되감기·도장·되돌아가기가 전부 구현 가능하다
+   토큰은 형제 앱 renderer/tokens.css 사본이다 — 단일 원본은 그쪽.
+   ──────────────────────────────────────────────────────────── */
+@font-face {
+  font-family:'Pretendard Variable';
+  src: local('Pretendard Variable'), local('Pretendard');
+  font-weight:100 900; font-display:swap;
+}
+:root {
+  --bg-app:#16171c; --bg-raised:#1e2027; --bg-inset:#131419; --bg-hover:#262933;
+  --border:#2e323d; --border-focus:#7aa2f7;
+  --text-primary:#e6e8ee; --text-secondary:#a8afbd; --text-muted:#7b8294;
+  --accent:#7aa2f7; --accent-dim:rgba(122,162,247,.14);
+  --success:#9ece6a; --warning:#e0af68; --danger:#f7768e;
+  --music:#bb9af7; --music-dim:rgba(187,154,247,.14);
+
+  --font-sans:"Pretendard Variable","Pretendard","Malgun Gothic",system-ui,sans-serif;
+  --font-mono:"Cascadia Code","D2Coding",Consolas,monospace;
+  --fs-lg:16px; --fs-md:14px; --fs-sm:13px; --fs-xs:12px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
+  --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:16px;
+  --shadow-pop:0 12px 40px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
+
+  --ov-bg:rgba(18,21,27,.96);
+  --ov-border:1px solid rgba(255,255,255,.12);
+  --ov-shadow:0 7px 26px rgba(0,0,0,.5);
+}
+* { box-sizing:border-box; margin:0; }
+body {
+  background:#0c0d11; color:var(--text-primary);
+  font-family:var(--font-sans); font-size:var(--fs-md); line-height:1.5;
+  padding:28px 22px 80px; -webkit-font-smoothing:antialiased;
+}
+.page { max-width:1500px; margin:0 auto; }
+h1 { font-size:20px; font-weight:650; letter-spacing:-.4px; margin-bottom:4px; }
+.lede { color:var(--text-muted); font-size:13px; line-height:1.75; margin-bottom:10px; max-width:1040px; }
+.lede b { color:var(--text-secondary); }
+.lede code { font-family:var(--font-mono); font-size:11.5px; color:var(--music); }
+h2 { font-size:14.5px; font-weight:680; margin:34px 0 3px; padding-top:18px; border-top:1px solid var(--border); }
+h2 .n { font-family:var(--font-mono); font-size:11px; color:var(--music);
+        background:var(--music-dim); border-radius:4px; padding:1px 6px; margin-right:7px; }
+.sublede { color:var(--text-muted); font-size:12.5px; line-height:1.7; margin-bottom:18px; max-width:1040px; }
+.sublede b { color:var(--text-secondary); }
+.sublede code { font-family:var(--font-mono); font-size:11.5px; color:var(--music); }
+
+.shelf { display:grid; grid-template-columns:repeat(auto-fit,minmax(430px,1fr)); gap:20px; }
+.shelf.wide { grid-template-columns:repeat(auto-fit,minmax(660px,1fr)); gap:24px; }
+.mock { min-width:0; }
+.mock > .cap { display:flex; align-items:baseline; gap:8px; margin-bottom:7px; flex-wrap:wrap; }
+.mock > .cap b { font-size:13.5px; font-weight:650; }
+.mock > .cap .tag { font-size:10.5px; font-family:var(--font-mono); color:var(--text-muted);
+                    border:1px solid var(--border); border-radius:4px; padding:0 5px; flex:none; }
+.mock > .cap .rec { font-size:10.5px; font-family:var(--font-mono); color:var(--music);
+                    background:var(--music-dim); border-radius:4px; padding:0 5px; flex:none; }
+.mock > .cap span { font-size:11.5px; color:var(--text-muted); }
+.mock > .note { font-size:11.5px; color:var(--text-muted); line-height:1.7; margin-top:8px; }
+.mock > .note b { color:var(--text-secondary); font-weight:600; }
+.mock > .note .no { color:var(--danger); }
+.mock > .note .yes { color:var(--success); }
+.mock > .note code { font-family:var(--font-mono); font-size:11px; color:var(--music); }
+
+/* 바탕 — 오버레이는 배경 위에서만 평가된다 */
+.desk { position:relative; height:212px; border-radius:var(--r-lg); overflow:hidden;
+        border:1px solid var(--border); background:#11131a; user-select:none; }
+.desk.tall { height:290px; }
+.desk .code { font-family:var(--font-mono); font-size:10.5px; line-height:1.85;
+              color:#333a48; padding:13px 16px; white-space:pre; overflow:hidden; }
+.desk .code .c { color:#262c36; } .desk .code .k { color:#4d5c78; }
+.desk::after { content:""; position:absolute; inset:0; pointer-events:none;
+               background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.5)); }
+.layer { position:absolute; inset:0; pointer-events:none; z-index:2; }
+
+.ov { background:var(--ov-bg); border:var(--ov-border); box-shadow:var(--ov-shadow);
+      color:var(--text-primary); position:absolute; }
+/* 코너 고정 — whencalendar가 상단 중앙을 쓰므로 이쪽은 우하단이다 */
+.corner { right:16px; bottom:16px; }
+
+/* 16:9 썸네일. 실측 150×83이라 정사각으로 쓰면 잘린다 */
+.thumb { flex:none; border-radius:var(--r-sm); overflow:hidden; position:relative;
+         background:linear-gradient(135deg,#8c5b3b,#6b4a2a 58%,#3b3b5b); }
+.thumb::after { content:""; position:absolute; inset:0;
+                background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.2),transparent 62%); }
+.thumb.none { background:var(--bg-inset); border:1px solid var(--border); }
+.thumb.none::after { display:none; }
+
+.meta { min-width:0; display:flex; flex-direction:column; gap:1px; }
+.meta .t { font-size:12px; font-weight:600; letter-spacing:-.2px; line-height:1.38; }
+.meta .t.one { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.meta .a { font-size:10.5px; color:var(--text-muted); white-space:nowrap;
+           overflow:hidden; text-overflow:ellipsis; }
+
+.src { display:inline-flex; align-items:center; gap:4px; flex:none; font-size:9.5px;
+       font-family:var(--font-mono); color:#7a94c4; background:var(--bg-inset);
+       border:1px solid var(--border); border-radius:99px; padding:1px 7px 1px 5px; }
+.src .d { width:6px; height:6px; border-radius:99px; background:var(--accent); flex:none; }
+
+/* 진행바 + 도장 눈금 */
+.bar { height:3px; border-radius:3px; background:rgba(140,148,160,.24); position:relative; }
+.bar > i { display:block; height:100%; border-radius:3px; background:var(--music); }
+.bar.thick { height:8px; border-radius:4px; }
+.bar.thick > i { border-radius:4px; }
+.mark { position:absolute; top:-3px; width:2px; height:9px; background:var(--music);
+        box-shadow:0 0 6px var(--music); border-radius:1px; }
+.mark.old { background:rgba(187,154,247,.45); box-shadow:none; height:7px; top:-2px; }
+.bar.thick .mark { top:-2px; height:12px; }
+.tm { font-family:var(--font-mono); font-size:9.5px; color:var(--text-muted); flex:none; }
+
+/* 컨트롤 */
+.ctl { display:flex; align-items:center; gap:2px; flex:none; }
+.ctl button { all:unset; display:grid; place-items:center; width:25px; height:25px;
+              border-radius:var(--r-sm); color:var(--text-secondary); cursor:default; }
+.ctl button:hover { background:var(--bg-hover); color:var(--text-primary); }
+.ctl button.big { width:29px; height:29px; background:var(--music-dim); color:var(--music); }
+.ctl button.stamp { color:var(--music); }
+.ctl svg { width:13px; height:13px; fill:currentColor; }
+.ctl button.big svg { width:14px; height:14px; }
+.ctl .sep { width:1px; height:15px; background:var(--border); margin:0 3px; flex:none; }
+
+kbd { font-family:var(--font-mono); font-size:10.5px; background:var(--bg-inset);
+      border:1px solid var(--border); border-bottom-width:2px; border-radius:5px;
+      padding:1px 6px; color:var(--text-secondary); line-height:1.4; }
+
+table.spec { border-collapse:collapse; width:100%; max-width:1040px; font-size:12.5px; margin-top:4px; }
+table.spec th, table.spec td { text-align:left; vertical-align:top; padding:7px 12px 7px 0;
+                               border-bottom:1px solid var(--border); }
+table.spec th { color:var(--text-secondary); font-weight:640; font-size:11.5px; white-space:nowrap; }
+table.spec td { color:var(--text-muted); line-height:1.65; }
+table.spec td b { color:var(--text-secondary); font-weight:600; }
+table.spec code { font-family:var(--font-mono); font-size:11px; color:var(--music); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>WHENMUSIC — 코너 카드 변형안</h1>
+<p class="lede">
+  확정된 전제로만 그렸다. <b>안 D(우하단 코너 카드)</b> · 소스는 브라우저 유튜브의 1시간 믹스라
+  <b>곡 단위 정보가 오지 않는다</b> · 썸네일은 16:9(150×83)이고 곡과 무관하다 ·
+  제어는 SMTC 세션 직접 명령이라 <b>대상 지정과 절대 시크가 모두 된다</b>(실측 확인).
+  그래서 <code>-10초</code> 되감기와 도장, 그리고 도장으로 되돌아가기가 전부 그릴 수 있는 것이 됐다.
+  모든 시안의 데이터는 실측값이다 — <code>58:01 / 1:02:11</code>.
+</p>
+
+<h2><span class="n">0</span>확정 — 안 1, 블러를 약하게</h2>
+<p class="sublede">
+  썸네일이 얼추 보이게 블러를 낮춘다. 여기엔 <b>역설이 하나 있다</b> — 블러를 약하게 할수록 이미지의
+  밝고 어두운 부분이 살아나서 <b>그 위의 글자 대비가 무너진다.</b> 그래서 단순히 블러만 낮출 수 없고,
+  낮춘 만큼 덮개를 진하게 해야 하는데 그러면 다시 이미지가 안 보인다.
+  아래 다섯은 그 절충을 단계별로 놓은 것이고, <b>마지막 하나만 다른 방법을 쓴다.</b>
+  배경은 <b>실제 SMTC가 준 썸네일</b>(150×83 PNG)이라 판단이 정확하다.
+</p>
+
+<div class="shelf">
+
+  <div class="mock">
+    <div class="cap"><b>㉠ 원안</b><span class="tag">blur 17px</span>
+      <span>덮개 .95 / .74 — 이미지가 색으로만 남는다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 형태를 알아볼 수 없다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:url(sample-thumb.png) center/cover;
+                      filter:blur(17px);transform:scale(1.45)"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.95),rgba(18,21,27,.74))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1"><i style="width:93%"></i>
+                <span class="mark old" style="left:34%"></span><span class="mark" style="left:71%"></span></div>
+              <span class="tm">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">글자는 가장 잘 읽힌다. <span class="no">어느 믹스인지는 알 수 없다.</span></div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>㉡ 약하게</b><span class="tag">blur 9px</span>
+      <span>덮개 .93 / .76 — 형태가 어렴풋이 잡힌다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 사람인지 풍경인지 정도가 구분된다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:url(sample-thumb.png) center/cover;
+                      filter:blur(9px);transform:scale(1.28)"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.93),rgba(18,21,27,.76))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1"><i style="width:93%"></i>
+                <span class="mark old" style="left:34%"></span><span class="mark" style="left:71%"></span></div>
+              <span class="tm">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">덮개를 거의 그대로 두고도 형태가 산다. <b>가독성 손실이 아직 없는 지점이다.</b></div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>㉢ 더 약하게</b><span class="tag">blur 5px</span>
+      <span>덮개 .92 / .80 — 무슨 사진인지 알아본다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 덮개를 진하게 올려야 글자가 버틴다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:url(sample-thumb.png) center/cover;
+                      filter:blur(5px);transform:scale(1.18)"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.92),rgba(18,21,27,.8))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1"><i style="width:93%"></i>
+                <span class="mark old" style="left:34%"></span><span class="mark" style="left:71%"></span></div>
+              <span class="tm">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      덮개가 진해진 만큼 <span class="no">㉡보다 오히려 어두워 보인다</span> — 블러를 낮춘 이득이 상쇄되기 시작한다.
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>㉣ 거의 선명</b><span class="tag">blur 2px</span>
+      <span>덮개 .92 / .84 — 사진이 그대로 보인다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 밝은 부분에서 글자가 흔들린다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:url(sample-thumb.png) center/cover;
+                      filter:blur(2px);transform:scale(1.08)"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.92),rgba(18,21,27,.84))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1"><i style="width:93%"></i>
+                <span class="mark old" style="left:34%"></span><span class="mark" style="left:71%"></span></div>
+              <span class="tm">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <span class="no">썸네일마다 밝기가 달라서 어떤 이미지에서는 글자가 깨진다.</span>
+      들어올 이미지를 고를 수 없으므로 이 강도는 위험하다.
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>㉤ 덮개 대신 글자를 보호</b><span class="rec">추천</span><span class="tag">blur 6px</span>
+      <span>전면 덮개를 걷고, 글자 뒤에만 그림자·좌측 띠를 둔다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 이미지는 밝게 두고 글자만 지킨다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:url(sample-thumb.png) center/cover;
+                      filter:blur(6px);transform:scale(1.2)"></div>
+          <!-- 전면 덮개가 아니라 왼쪽에서 오른쪽으로 빠지는 띠 — 글자가 놓인 쪽만 덮는다 -->
+          <div style="position:absolute;inset:0;background:linear-gradient(100deg,rgba(14,16,21,.94) 38%,rgba(14,16,21,.62) 72%,rgba(14,16,21,.42))"></div>
+          <div style="position:relative;text-shadow:0 1px 3px rgba(0,0,0,.8)">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px;color:#b9c0cd">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+              <span class="tm" style="color:#b9c0cd">58:01</span>
+              <div class="bar" style="flex:1;background:rgba(0,0,0,.45)"><i style="width:93%"></i>
+                <span class="mark old" style="left:34%"></span><span class="mark" style="left:71%"></span></div>
+              <span class="tm" style="color:#b9c0cd">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>블러를 낮추면서 가독성도 지키는 유일한 방법이다.</b> 글자는 카드 왼쪽에 몰려 있으니
+      덮개도 왼쪽만 진하게 하고 오른쪽으로 빠지게 두면, <span class="yes">썸네일이 오른쪽에서 살아난다.</span>
+      글자에는 <code>text-shadow</code>를 얹어 밝은 이미지에서도 버티게 했다.
+      진행바 바탕도 흰빛 대신 검정 반투명으로 바꿔야 이미지 위에서 보인다.
+    </div>
+  </div>
+
+</div>
+
+<h2><span class="n">1</span>카드 변형 6종 <span style="font-size:11.5px;color:var(--text-muted);font-weight:400">— 안 1 채택, 기록용으로 남긴다</span></h2>
+<p class="sublede">
+  변수는 둘이다. <b>썸네일을 어디까지 믿을지</b>(곡과 무관한 이미지다)와
+  <b>진행바를 정보로 볼지 조작기로 볼지</b>(1시간 믹스에서 위치는 곧 "어디쯤 듣고 있나"다).
+  <kbd>Ctrl+Alt+S</kbd>가 도장, 별 모양 버튼이 같은 일을 한다.
+</p>
+
+<div class="shelf">
+
+  <!-- ── 안 1. 배경 blur ── -->
+  <div class="mock">
+    <div class="cap"><b>안 1 · 배경 blur</b><span class="rec">추천</span><span class="tag">248×104</span>
+      <span>썸네일을 정보 슬롯에서 빼서 배경으로 깐다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 썸네일은 분위기만. 읽을 것은 글자뿐이다</span>
+<span class="k">const</span> art = session.media.thumbnail;  <span class="c">// 150×83</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(135deg,#8c5b3b,#6b4a2a 58%,#3b3b5b);
+                      filter:blur(17px);transform:scale(1.45);opacity:.5"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.95),rgba(18,21,27,.74))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px">CherryMix · 오늘 세 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+              <span class="src"><span class="d"></span>Chrome</span>
+              <div class="ctl" style="margin-left:auto">
+                <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+                <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+                <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:8px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1">
+                <i style="width:93%"></i>
+                <span class="mark old" style="left:11%"></span>
+                <span class="mark old" style="left:34%"></span>
+                <span class="mark" style="left:71%"></span>
+              </div>
+              <span class="tm">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>어떤 비율의 이미지가 와도 흔들리지 않고, 아트가 없어도 같은 모습이다</b> —
+      <span class="yes">폴백 상태가 따로 필요 없다.</span> 제목의 유니코드 볼드는 NFKC로 평문화했다.
+      진행바의 흐린 눈금이 이 믹스에 앞서 찍은 도장이다.
+    </div>
+  </div>
+
+  <!-- ── 안 2. 썸네일 좌측 16:9 ── -->
+  <div class="mock">
+    <div class="cap"><b>안 2 · 썸네일 그대로</b><span class="tag">262×96</span>
+      <span>150×83을 비율대로 왼쪽에 둔다. 자르지 않는다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 16:9를 그대로 — 크롭도 레터박스도 없다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:262px;border-radius:var(--r-md);padding:10px 11px 9px">
+          <div style="display:flex;gap:10px">
+            <div class="thumb" style="width:76px;height:43px"></div>
+            <div style="min-width:0;flex:1">
+              <div class="meta">
+                <div class="t one">[Playlist] 우연히 듣고 반해버려서…</div>
+                <div class="a">CherryMix</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+            <span class="tm">58:01</span>
+            <div class="bar" style="flex:1"><i style="width:93%"></i>
+              <span class="mark old" style="left:34%"></span><span class="mark" style="left:71%"></span></div>
+            <span class="tm">1:02:11</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+            <span class="src"><span class="d"></span>Chrome</span>
+            <div class="ctl" style="margin-left:auto">
+              <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+              <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+              <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      썸네일이 <b>어느 믹스인지 한눈에 구분하는 표지</b>가 된다 — 같은 채널을 반복해 들으면 제목보다 빠르다.
+      <span class="no">대신 곡과 무관한 사진이 96px 카드의 3분의 1을 차지한다.</span>
+    </div>
+  </div>
+
+  <!-- ── 안 3. 텍스트 전용 ── -->
+  <div class="mock">
+    <div class="cap"><b>안 3 · 텍스트 전용</b><span class="tag">228×78</span>
+      <span>곡 정보가 없으니 이미지도 뺀다. 가장 작다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 썸네일을 아예 쓰지 않는다 — 정보가 아니므로</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:228px;border-radius:var(--r-md);padding:10px 11px 9px">
+          <div class="meta">
+            <div class="t">[Playlist] 우연히 듣고 반해버려서…</div>
+            <div class="a" style="margin-top:2px">CherryMix · 58:01 / 1:02:11</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+            <div class="bar" style="flex:1"><i style="width:93%"></i>
+              <span class="mark" style="left:71%"></span></div>
+            <div class="ctl">
+              <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+              <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+              <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>가장 정직한 안이다</b> — 오지 않는 정보의 자리를 만들지 않는다. 시간도 한 줄에 합쳤다.
+      <span class="no">다만 믹스가 바뀌어도 화면이 거의 같아 보여서</span>, 곡 전환을 눈으로 알아채기 어렵다.
+    </div>
+  </div>
+
+  <!-- ── 안 4. 진행바 주인공 ── -->
+  <div class="mock">
+    <div class="cap"><b>안 4 · 진행바가 주인공</b><span class="tag">248×92</span>
+      <span>1시간 믹스에서 가장 중요한 정보는 "어디쯤"이다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 진행바를 8px로. 도장 눈금이 읽히고 드래그로 시크한다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:10px 12px 11px">
+          <div style="display:flex;align-items:baseline;gap:7px">
+            <div class="meta" style="flex:1">
+              <div class="t one">[Playlist] 우연히 듣고 반해버려서…</div>
+            </div>
+            <span class="tm" style="font-size:10.5px;color:var(--music)">58:01</span>
+          </div>
+          <div class="bar thick" style="margin-top:10px">
+            <i style="width:93%"></i>
+            <span class="mark old" style="left:11%"></span>
+            <span class="mark old" style="left:34%"></span>
+            <span class="mark" style="left:71%"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+            <span class="a" style="font-size:10.5px;color:var(--text-muted)">CherryMix · 도장 3</span>
+            <div class="ctl" style="margin-left:auto">
+              <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+              <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+              <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>도장 눈금을 클릭해 그 지점으로 바로 뛴다</b> — 절대 시크가 되니까 가능한 조작이다.
+      8px 바는 드래그 목표로도 충분하다. 1시간 믹스에서는 이게 가장 많이 쓰는 조작이 될 가능성이 크다.
+    </div>
+  </div>
+
+  <!-- ── 안 5. 세로 스택 ── -->
+  <div class="mock">
+    <div class="cap"><b>안 5 · 세로 스택</b><span class="tag">232×164</span>
+      <span>썸네일을 전체폭 16:9로. 가장 크고 가장 많이 가린다</span></div>
+    <div class="desk tall">
+      <div class="code"><span class="c">// 썸네일을 카드 폭에 맞춰 얹는다</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:232px;border-radius:var(--r-md);padding:0;overflow:hidden">
+          <div class="thumb" style="width:100%;height:130px;border-radius:0"></div>
+          <div style="padding:9px 11px 10px">
+            <div class="meta">
+              <div class="t one">[Playlist] 우연히 듣고…</div>
+              <div class="a">CherryMix</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:8px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1"><i style="width:93%"></i><span class="mark" style="left:71%"></span></div>
+            </div>
+            <div class="ctl" style="margin-top:8px;justify-content:space-between">
+              <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+              <button aria-label="이전"><svg viewBox="0 0 24 24"><path d="M7 6h2v12H7zm3 6l8-6v12z"/></svg></button>
+              <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+              <button aria-label="다음"><svg viewBox="0 0 24 24"><path d="M15 6h2v12h-2zM6 6l8 6-8 6z"/></svg></button>
+              <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      조작 목표가 가장 크고 다섯 버튼이 다 들어간다. <span class="no">그러나 164px는 상주 오버레이로 과하다</span> —
+      곡과 무관한 사진에 130px를 쓰는 셈이고, "평소엔 점 하나"라는 시리즈 원칙에서 가장 멀다.
+    </div>
+  </div>
+
+  <!-- ── 안 6. 작업표시줄 바 ── -->
+  <div class="mock">
+    <div class="cap"><b>안 6 · 납작한 바</b><span class="tag">340×40</span>
+      <span>코너를 포기하고 작업표시줄 위에 눕는다</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 가로로 눕히면 제목이 한 줄로 다 들어간다</span></div>
+      <div class="layer">
+        <div class="ov" style="right:16px;bottom:16px;width:340px;border-radius:20px;
+             padding:5px 9px 7px 7px;display:flex;align-items:center;gap:9px">
+          <div class="thumb" style="width:44px;height:25px"></div>
+          <div class="meta" style="flex:1">
+            <div class="t one" style="font-size:11.5px">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+            <div class="a" style="font-size:10px">CherryMix · 58:01</div>
+          </div>
+          <div class="ctl">
+            <button aria-label="10초 뒤로"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+            <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+            <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+          </div>
+          <div class="bar" style="position:absolute;left:14px;right:14px;bottom:3px;height:2px">
+            <i style="width:93%"></i><span class="mark" style="left:71%;top:-3px;height:8px"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>긴 제목이 잘리지 않는 유일한 안이다</b> — 유튜브 믹스 제목은 실측처럼 길다.
+      높이 40px로 안 5의 4분의 1이다. <span class="no">다만 폭 340px이 화면 아래를 가로지른다.</span>
+    </div>
+  </div>
+
+</div>
+
+<h2><span class="n">2</span>도장 — 찍고, 돌아가기</h2>
+<p class="sublede">
+  "좋은 곡을 놓친다"를 푸는 기능이다. 절대 시크가 되므로 두 방향이 열렸는데,
+  <b>주 동작은 ② 되감아 확인으로 정했다</b>(<kbd>Ctrl+Alt+←</kbd>) — 곡을 지금 바로 확인하는 것이
+  나중에 되짚는 것보다 직접적이고, 도장은 <b>되감을 여유조차 없을 때의 보조 수단</b>이 된다.
+  그래서 카드의 기본 버튼도 되감기가 왼쪽 첫 자리를 차지한다. 아래는 안 1 기준 3컷이다.
+</p>
+
+<div class="shelf">
+
+  <div class="mock">
+    <div class="cap"><b>① 찍는 순간</b><span class="tag">1.4초 노출</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 도장 = { videoTitle, channel, positionSec, at }</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;
+             border-color:rgba(187,154,247,.5);overflow:hidden">
+          <div style="position:absolute;inset:0;background:var(--music-dim)"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t" style="color:var(--music)">58:01에 표시했습니다</div>
+              <div class="a" style="margin-top:2px">CherryMix 믹스 · 이번이 네 번째</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+              <span class="tm">58:01</span>
+              <div class="bar" style="flex:1">
+                <i style="width:93%"></i>
+                <span class="mark old" style="left:11%"></span><span class="mark old" style="left:34%"></span>
+                <span class="mark old" style="left:71%"></span><span class="mark" style="left:93%"></span>
+              </div>
+              <span class="tm">1:02:11</span>
+            </div>
+            <div class="a" style="margin-top:8px;font-size:10.5px">되감아 듣기 <kbd>Ctrl+Alt+←</kbd></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>확인 없이 끝난다.</b> 몰입을 끊지 않으려면 이 화면이 사라지는 것까지가 기능이다 —
+      1.4초 뒤 평소 카드로 되돌아간다. 소리는 내지 않는다.
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>② 되감아 확인</b><span class="tag">-15초</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// TryChangePlaybackPositionAsync(pos - 15s) — 실측 오차 0</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:11px 12px 10px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(135deg,#8c5b3b,#6b4a2a 58%,#3b3b5b);
+                      filter:blur(17px);transform:scale(1.45);opacity:.5"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(18,21,27,.95),rgba(18,21,27,.74))"></div>
+          <div style="position:relative">
+            <div class="meta">
+              <div class="t">[Playlist] 우연히 듣고 반해버려서… 감성 힙합/R&amp;B</div>
+              <div class="a" style="margin-top:2px;color:var(--music)">← 15초 되감음 · 57:46</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+              <span class="src"><span class="d"></span>Chrome</span>
+              <div class="ctl" style="margin-left:auto">
+                <button aria-label="10초 뒤로" style="background:var(--music-dim);color:var(--music)"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+                <button class="big" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zm5 0h3v14h-3z"/></svg></button>
+                <button class="stamp" aria-label="이 순간 표시"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.8-5 4.7 1.3 6.8L12 17.3 5.9 20.6 7.2 13.8l-5-4.7 6.9-.8z"/></svg></button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:8px">
+              <span class="tm" style="color:var(--music)">57:46</span>
+              <div class="bar" style="flex:1"><i style="width:92.6%"></i>
+                <span class="mark old" style="left:34%"></span><span class="mark old" style="left:71%"></span></div>
+              <span class="tm">1:02:11</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      곡이 끝나버렸을 때 쓴다. <b>브라우저로 가지 않고 그 자리에서 되감는다</b> —
+      미디어 키로는 불가능하고, 세션 직접 명령이라 가능하다. 되감은 양을 잠깐 글자로 말한다.
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>③ 도장으로 돌아가기</b><span class="tag">호버 펼침</span></div>
+    <div class="desk">
+      <div class="code"><span class="c">// 같은 세션이 살아 있으면 시크, 아니면 URL + &amp;t=</span></div>
+      <div class="layer">
+        <div class="ov corner" style="width:248px;border-radius:var(--r-md);padding:10px 11px 9px">
+          <div class="meta">
+            <div class="t one">[Playlist] 우연히 듣고 반해버려서…</div>
+            <div class="a" style="margin-top:1px">이 믹스에 찍은 도장 4</div>
+          </div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:1px">
+            <div style="display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:var(--r-sm);
+                        background:var(--music-dim)">
+              <span class="tm" style="color:var(--music);width:38px">58:01</span>
+              <span style="font-size:10.5px;color:var(--text-secondary);flex:1">방금</span>
+              <span style="font-size:10px;color:var(--music)">여기로 ↵</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:3px 6px">
+              <span class="tm" style="width:38px">44:17</span>
+              <span style="font-size:10.5px;color:var(--text-muted);flex:1">14분 전</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:3px 6px">
+              <span class="tm" style="width:38px">21:08</span>
+              <span style="font-size:10.5px;color:var(--text-muted);flex:1">37분 전</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:3px 6px">
+              <span class="tm" style="width:38px">06:52</span>
+              <span style="font-size:10.5px;color:var(--text-muted);flex:1">51분 전</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      카드에 마우스를 올리면 <b>이번 믹스의 도장 목록</b>으로 바뀐다. 창을 열지 않고 돌아갈 수 있다.
+      <span class="no">단 며칠 뒤에 찾아가려면 영상 URL이 필요한데, SMTC는 videoId를 주지 않는다</span> — 오픈이슈다.
+    </div>
+  </div>
+
+</div>
+
+<h2><span class="n">3</span>이력 창 — 믹스 단위로 다시</h2>
+<p class="sublede">
+  앞선 목업의 이력 창은 <b>곡 단위였고, 그건 이 청취 형태에서 성립하지 않는다</b>(하루에 3~4줄만 쌓인다).
+  믹스·채널 단위로 다시 그렸다. 답해야 하는 질문은 <b>"지난주 잘 들었던 그 믹스"</b>다.
+  <b>확정: 안 A를 첫 탭(기본)으로 두고 안 B를 두 번째 탭으로 함께 둔다.</b>
+  두 안은 경쟁 관계가 아니라 다른 질문에 답한다 — A는 "얼마나 들었나", B는 "놓친 것 되짚기".
+  창을 열면 A가 먼저 보이고, 확인 안 한 도장이 있으면 B 탭에 개수 배지가 붙는다.
+</p>
+
+<div class="shelf wide">
+
+  <div class="mock">
+    <div class="cap"><b>안 A · 세션 목록</b><span class="rec">추천</span><span class="tag">720×520</span>
+      <span>한 줄이 "한 번 들은 믹스". 도장이 그 줄에 달린다</span></div>
+    <div class="desk tall" style="height:auto;background:var(--bg-app);padding:0">
+      <div style="display:flex;align-items:center;gap:var(--sp-4);padding:9px var(--sp-4);border-bottom:1px solid var(--border)">
+        <span style="font-size:var(--fs-xs);font-weight:750;letter-spacing:.8px;color:var(--text-secondary);
+                     display:flex;align-items:center;gap:7px">
+          <span style="width:9px;height:9px;border-radius:99px;background:var(--music);
+                       box-shadow:0 0 9px var(--music-dim)"></span>WHENMUSIC</span>
+        <div style="display:flex;gap:2px">
+          <div style="padding:4px 11px;border-radius:var(--r-sm);font-size:var(--fs-sm);
+                      color:var(--text-primary);background:var(--bg-hover)">이력</div>
+          <div style="padding:4px 11px;border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--text-muted)">도장 <span style="font-size:10.5px;padding:0 5px;border-radius:99px;background:var(--music-dim);color:var(--music)">31</span></div>
+          <div style="padding:4px 11px;border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--text-muted)">설정</div>
+        </div>
+        <span style="margin-left:auto;color:var(--text-muted);font-size:var(--fs-xs)">이번 주 14시간 20분</span>
+      </div>
+
+      <div style="padding:10px var(--sp-4) 8px">
+        <div style="display:flex;align-items:center;gap:8px;background:var(--bg-inset);
+                    border:1px solid var(--border-focus);border-radius:var(--r-sm);padding:6px 10px">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:var(--text-muted);flex:none"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 119.5 5a4.5 4.5 0 010 9z"/></svg>
+          <span style="flex:1;font-size:var(--fs-sm);color:var(--text-primary)">ㅎㅎ</span>
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--music);
+                       background:var(--music-dim);border-radius:4px;padding:1px 6px">초성</span>
+        </div>
+      </div>
+
+      <div style="padding:0 var(--sp-4) 14px">
+        <div style="display:flex;align-items:center;gap:9px;padding:11px 0 5px">
+          <b style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:640">오늘</b>
+          <i style="flex:1;height:1px;background:var(--border)"></i>
+          <em style="font-style:normal;font-size:10.5px;color:var(--text-muted);font-family:var(--font-mono)">3시간 41분 · 믹스 3</em>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:var(--r-sm);
+                    background:var(--music-dim);box-shadow:inset 2px 0 0 var(--music)">
+          <span class="tm" style="width:42px">14:03</span>
+          <div class="thumb" style="width:52px;height:29px"></div>
+          <div class="meta" style="flex:1">
+            <div class="t one" style="font-size:var(--fs-sm)">[Playlist] 우연히 듣고 반해버려서… <mark style="background:transparent;color:var(--music);font-weight:650">감성</mark> 힙합/R&amp;B</div>
+            <div class="a">CherryMix · 지금 듣는 중</div>
+          </div>
+          <span style="font-size:10px;color:var(--music);flex:none">도장 4</span>
+          <span class="tm">58분</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:var(--r-sm)">
+          <span class="tm" style="width:42px">11:20</span>
+          <div class="thumb" style="width:52px;height:29px;background:linear-gradient(135deg,#3b5b8c,#2a4a6b 60%,#5b3b6b)"></div>
+          <div class="meta" style="flex:1">
+            <div class="t one" style="font-size:var(--fs-sm)">비 오는 새벽 감성 <mark style="background:transparent;color:var(--music);font-weight:650">R&amp;B</mark> 플레이리스트</div>
+            <div class="a">CherryMix</div>
+          </div>
+          <span style="font-size:10px;color:var(--music);flex:none">도장 2</span>
+          <span class="tm">1시간 2분</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:var(--r-sm)">
+          <span class="tm" style="width:42px">09:47</span>
+          <div class="thumb none" style="width:52px;height:29px"></div>
+          <div class="meta" style="flex:1">
+            <div class="t one" style="font-size:var(--fs-sm)">lofi hip hop radio — beats to relax/study to</div>
+            <div class="a">Lofi Girl · 길이 모름(스트림)</div>
+          </div>
+          <span class="tm">1시간 41분</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:9px;padding:13px 0 5px">
+          <b style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:640">어제</b>
+          <i style="flex:1;height:1px;background:var(--border)"></i>
+          <em style="font-style:normal;font-size:10.5px;color:var(--text-muted);font-family:var(--font-mono)">2시간 08분 · 믹스 2</em>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:var(--r-sm)">
+          <span class="tm" style="width:42px">21:15</span>
+          <div class="thumb" style="width:52px;height:29px;background:linear-gradient(135deg,#6b3b5b,#3b2a4a 60%,#2a5b5b)"></div>
+          <div class="meta" style="flex:1">
+            <div class="t one" style="font-size:var(--fs-sm)">새벽에 혼자 듣는 <mark style="background:transparent;color:var(--music);font-weight:650">감성</mark> 알앤비</div>
+            <div class="a">밤과음악</div>
+          </div>
+          <span style="font-size:10px;color:var(--music);flex:none">도장 1</span>
+          <span class="tm">1시간 12분</span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:7px var(--sp-4);
+                  border-top:1px solid var(--border);font-size:var(--fs-xs);color:var(--text-muted)">
+        <span>한 줄이 한 번 들은 믹스다</span>
+        <span style="margin-left:auto;display:flex;gap:11px">
+          <span><kbd>/</kbd> 검색</span><span><kbd>↵</kbd> 이어 듣기</span><span><kbd>Esc</kbd> 닫기</span>
+        </span>
+      </div>
+    </div>
+    <div class="note">
+      <b>초성 검색은 그대로 쓸모가 있다</b> — 믹스 제목이 전부 한국어이고 길다(<code>ㅎㅎ</code> → 힙합).
+      <kbd>↵</kbd>는 <b>그 믹스를 마지막에 들은 지점부터 이어 재생</b>한다 — 절대 시크가 되니 가능한 동작이다.
+      길이를 모르는 라디오 스트림은 소요 시간만 쌓인다.
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="cap"><b>안 B · 도장 우선</b><span class="tag">720×520</span>
+      <span>믹스가 아니라 도장을 1급으로. 찍은 순간이 목록의 단위다</span></div>
+    <div class="desk tall" style="height:auto;background:var(--bg-app);padding:0">
+      <div style="display:flex;align-items:center;gap:var(--sp-4);padding:9px var(--sp-4);border-bottom:1px solid var(--border)">
+        <span style="font-size:var(--fs-xs);font-weight:750;letter-spacing:.8px;color:var(--text-secondary);
+                     display:flex;align-items:center;gap:7px">
+          <span style="width:9px;height:9px;border-radius:99px;background:var(--music);
+                       box-shadow:0 0 9px var(--music-dim)"></span>WHENMUSIC</span>
+        <div style="display:flex;gap:2px">
+          <div style="padding:4px 11px;border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--text-muted)">이력</div>
+          <div style="padding:4px 11px;border-radius:var(--r-sm);font-size:var(--fs-sm);
+                      color:var(--text-primary);background:var(--bg-hover)">도장 <span style="font-size:10.5px;padding:0 5px;border-radius:99px;background:var(--music-dim);color:var(--music)">31</span></div>
+          <div style="padding:4px 11px;border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--text-muted)">설정</div>
+        </div>
+        <span style="margin-left:auto;color:var(--text-muted);font-size:var(--fs-xs)">아직 확인 안 한 도장 12</span>
+      </div>
+
+      <div style="padding:10px var(--sp-4) 4px;display:flex;gap:4px">
+        <span style="font-size:11px;color:var(--music);background:var(--music-dim);
+                     border-radius:99px;padding:2px 9px">확인 안 함 12</span>
+        <span style="font-size:11px;color:var(--text-muted);background:var(--bg-inset);
+                     border:1px solid var(--border);border-radius:99px;padding:2px 9px">전체 31</span>
+        <span style="font-size:11px;color:var(--text-muted);background:var(--bg-inset);
+                     border:1px solid var(--border);border-radius:99px;padding:2px 9px">이 채널</span>
+      </div>
+
+      <div style="padding:6px var(--sp-4) 14px">
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 0 5px">
+          <b style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:640">오늘</b>
+          <i style="flex:1;height:1px;background:var(--border)"></i>
+        </div>
+
+        <div style="display:flex;gap:10px;padding:8px 9px;border-radius:var(--r-sm);
+                    background:var(--music-dim);box-shadow:inset 2px 0 0 var(--music)">
+          <div style="width:44px;flex:none;text-align:center">
+            <div style="font-family:var(--font-mono);font-size:13px;color:var(--music);font-weight:600">58:01</div>
+            <div style="font-size:9.5px;color:var(--text-muted)">방금</div>
+          </div>
+          <div class="thumb" style="width:52px;height:29px;align-self:center"></div>
+          <div class="meta" style="flex:1;align-self:center">
+            <div class="t one" style="font-size:var(--fs-sm)">[Playlist] 우연히 듣고 반해버려서…</div>
+            <div class="a">CherryMix · 1시간 2분 중</div>
+          </div>
+          <div class="ctl" style="align-self:center">
+            <button aria-label="여기서 듣기" style="width:auto;padding:0 9px;height:24px;
+                    background:var(--music-dim);color:var(--music);font-size:10.5px;
+                    font-family:var(--font-sans)">여기서 듣기</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;padding:8px 9px;border-radius:var(--r-sm)">
+          <div style="width:44px;flex:none;text-align:center">
+            <div style="font-family:var(--font-mono);font-size:13px;color:var(--text-secondary)">44:17</div>
+            <div style="font-size:9.5px;color:var(--text-muted)">14분 전</div>
+          </div>
+          <div class="thumb" style="width:52px;height:29px;align-self:center"></div>
+          <div class="meta" style="flex:1;align-self:center">
+            <div class="t one" style="font-size:var(--fs-sm)">[Playlist] 우연히 듣고 반해버려서…</div>
+            <div class="a">CherryMix</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;padding:8px 9px;border-radius:var(--r-sm)">
+          <div style="width:44px;flex:none;text-align:center">
+            <div style="font-family:var(--font-mono);font-size:13px;color:var(--text-secondary)">12:30</div>
+            <div style="font-size:9.5px;color:var(--text-muted)">2시간 전</div>
+          </div>
+          <div class="thumb" style="width:52px;height:29px;align-self:center;
+               background:linear-gradient(135deg,#3b5b8c,#2a4a6b 60%,#5b3b6b)"></div>
+          <div class="meta" style="flex:1;align-self:center">
+            <div class="t one" style="font-size:var(--fs-sm)">비 오는 새벽 감성 R&amp;B 플레이리스트</div>
+            <div class="a">CherryMix · <span style="color:var(--success)">확인함</span></div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:9px;padding:13px 0 5px">
+          <b style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:640">어제</b>
+          <i style="flex:1;height:1px;background:var(--border)"></i>
+        </div>
+        <div style="display:flex;gap:10px;padding:8px 9px;border-radius:var(--r-sm)">
+          <div style="width:44px;flex:none;text-align:center">
+            <div style="font-family:var(--font-mono);font-size:13px;color:var(--text-secondary)">37:44</div>
+            <div style="font-size:9.5px;color:var(--text-muted)">어제 21:52</div>
+          </div>
+          <div class="thumb" style="width:52px;height:29px;align-self:center;
+               background:linear-gradient(135deg,#6b3b5b,#3b2a4a 60%,#2a5b5b)"></div>
+          <div class="meta" style="flex:1;align-self:center">
+            <div class="t one" style="font-size:var(--fs-sm)">새벽에 혼자 듣는 감성 알앤비</div>
+            <div class="a">밤과음악</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:7px var(--sp-4);
+                  border-top:1px solid var(--border);font-size:var(--fs-xs);color:var(--text-muted)">
+        <span>한 줄이 표시해 둔 한 순간이다</span>
+        <span style="margin-left:auto;display:flex;gap:11px">
+          <span><kbd>↵</kbd> 그 지점부터</span><span><kbd>X</kbd> 확인 처리</span><span><kbd>Esc</kbd> 닫기</span>
+        </span>
+      </div>
+    </div>
+    <div class="note">
+      <b>"확인 안 한 도장"이라는 상태가 생긴다</b> — 놓친 곡이 쌓이고, 한가할 때 하나씩 되짚는다.
+      나중에 되짚는 것이 실제 사용 방식이라면 이 안이 맞다.
+      <span class="no">반면 도장을 안 찍은 청취는 목록에서 사라져</span> "얼마나 들었나"는 답하지 못한다.
+      안 A와 탭으로 공존하는 것이 실제 답일 수 있다.
+    </div>
+  </div>
+
+</div>
+
+<h2><span class="n">4</span>스펙 노트</h2>
+<table class="spec">
+  <tr><th style="width:130px">위치</th>
+      <td>우하단 고정. whencalendar가 상단 중앙 아일랜드를 쓰므로 위쪽은 임자가 있다.
+          작업표시줄 높이를 피해 <code>workArea</code> 기준으로 배치한다</td></tr>
+  <tr><th>창 플래그</th>
+      <td><code>frame:false · transparent · focusable:false · skipTaskbar · alwaysOnTop</code> ·
+          <code>setIgnoreMouseEvents(true,{forward:true})</code> · z-order 1초 주기 재설정.
+          whencalendar <code>main/overlay.mjs</code>와 동일</td></tr>
+  <tr><th>낙관적 갱신</th>
+      <td>명령 수락은 5ms인데 <b>SMTC 상태 반영은 그보다 늦다</b>(실측: pause 직후 조회가 아직 Playing).
+          버튼을 누르면 UI를 먼저 바꾸고, 이벤트가 오면 맞춘다. 어긋나면 이벤트 값이 이긴다</td></tr>
+  <tr><th>진행바</th>
+      <td>position이 재생 중 갱신되지 않으므로(실측 최대 8분 낡음) <b>PLAYING 이벤트 시각과 그때의 position을
+          기준점으로 보간</b>한다. <code>transition:none</code> — 1초마다 갱신되는 값에 이징을 걸면 떨린다</td></tr>
+  <tr><th>도장 데이터</th>
+      <td><code>{ sourceAppId, videoTitle, channel, positionSec, at, confirmed }</code>.
+          제목은 NFKC 정규화해 저장하고 원문도 함께 둔다(유니코드 볼드·이모지·전각 <code>｜</code>)</td></tr>
+  <tr><th>접근성</th>
+      <td>오버레이는 <code>focusable:false</code>라 스크린리더·키보드가 닿지 않는다 —
+          도장·되감기·재생에 전역 단축키를 반드시 둔다. 본문 대비 ≈13:1, 보조 ≈4.6:1(AA 통과).
+          버튼 히트영역은 시각 25px / 판정 32px. 도장 상태를 색으로만 말하지 않는다(글자 병기)</td></tr>
+  <tr><th>단축키</th>
+      <td><kbd>Ctrl+Alt+P</kbd> 창 · <kbd>Ctrl+Alt+S</kbd> 도장 · <kbd>Ctrl+Alt+←</kbd> 되감기.
+          형제 앱과 충돌 없음(whenwork <kbd>Ctrl+Alt+Space</kbd>, whennote <kbd>Ctrl+Alt+M·N</kbd>,
+          whencalendar <kbd>Ctrl+Alt+C</kbd>)</td></tr>
+  <tr><th>확정 사항</th>
+      <td><b>카드</b> 안 1 · 블러 <code>6px</code> · <b>전면 덮개 대신 좌측 띠 + <code>text-shadow</code></b>(㉤) —
+          썸네일을 알아볼 수 있게 하면서 글자 대비를 지키는 유일한 조합이다.
+          진행바 바탕은 흰빛(<code>rgba(140,148,160,.24)</code>) 대신 <b>검정 반투명</b>으로 바꾼다.<br>
+          <b>도장</b> 주 동작은 되감아 확인(<kbd>Ctrl+Alt+←</kbd>), 도장은 보조.<br>
+          <b>이력</b> 안 A가 첫 탭, 안 B가 두 번째 탭. 확인 안 한 도장 수를 B 탭에 배지로</td></tr>
+  <tr><th>오픈이슈</th>
+      <td><b>1)</b> 며칠 뒤 그 믹스로 돌아가려면 영상 URL이 필요한데 SMTC는 videoId를 주지 않는다.
+          UI Automation은 활성 탭만 읽힌다 — 음악은 보통 백그라운드 탭이다.
+          <b>2)</b> 되감기 폭을 10초·15초 중 무엇으로 할지, 설정으로 열지.
+          <b>3)</b> 썸네일이 매우 밝은 이미지일 때 ㉤의 <code>text-shadow</code>만으로 충분한지 —
+          실사용에서 깨지면 밝기를 재서 덮개를 자동으로 올리는 보정이 필요하다</td></tr>
+</table>
+
+</div>
+</body>
+</html>
