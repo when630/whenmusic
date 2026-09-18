@@ -164,3 +164,96 @@ test('더 새로운 스키마는 열지 않는다', () => {
   assert.equal(reopened.state.reason, 'newer')
   assert.match(reopened.state.notice, /업데이트/)
 })
+
+test('제목·채널·초성으로 이력을 찾는다 (SRCH)', () => {
+  const { store } = tmpStore()
+  const base = { sourceApp: 'Chrome', startedAt: 1 }
+
+  store.startPlay({ ...base, title: '감성 힙합 모음', titleCho: 'ㄱㅅ ㅎㅎ ㅁㅇ', channel: 'CherryMix', channelCho: 'CherryMix' })
+  store.startPlay({ ...base, title: '재즈 밤', titleCho: 'ㅈㅈ ㅂ', channel: 'NightJazz', channelCho: 'NightJazz', sourceApp: 'Spotify.exe' })
+
+  assert.equal(store.searchPlays({ query: '힙합' }).length, 1)
+  assert.equal(store.searchPlays({ query: 'ㅎㅎ' }).length, 1)
+  assert.equal(store.searchPlays({ query: 'jazz' }).length, 1)
+  assert.equal(store.searchPlays({ query: '' }).length, 2)
+  assert.equal(store.searchPlays({ query: '없는말' }).length, 0)
+
+  // 소스 앱으로 거른다 (SRCH-04)
+  assert.equal(store.searchPlays({ sourceApp: 'Spotify.exe' }).length, 1)
+  store.close()
+})
+
+test('LIKE 와일드카드를 글자 그대로 찾는다', () => {
+  const { store } = tmpStore()
+  store.startPlay({ sourceApp: 'Chrome', title: '100% 순수', channel: 'x', startedAt: 1 })
+  store.startPlay({ sourceApp: 'Chrome', title: '아무거나', channel: 'y', startedAt: 2 })
+
+  assert.equal(store.searchPlays({ query: '100%' }).length, 1)
+  store.close()
+})
+
+test('삭제는 소프트 삭제이고 되돌릴 수 있다 (STOR-04)', () => {
+  const { store } = tmpStore()
+  const id = store.startPlay({ sourceApp: 'Chrome', title: '믹스', channel: 'c', startedAt: 1 })
+
+  store.softDeletePlay(id, 1000)
+  assert.equal(store.recentPlays().length, 0)
+
+  store.restorePlay(id)
+  assert.equal(store.recentPlays().length, 1)
+  store.close()
+})
+
+test('30일이 지난 것만 실제로 지운다 (STOR-04)', () => {
+  const { store } = tmpStore()
+  const keep = store.startPlay({ sourceApp: 'Chrome', title: '최근 삭제', channel: 'c', startedAt: 1 })
+  const gone = store.startPlay({ sourceApp: 'Chrome', title: '오래된 삭제', channel: 'c', startedAt: 1 })
+  store.addStamp({ playId: gone, posSec: 10, at: 1 })
+
+  const now = 1_700_000_000_000
+  const month = 30 * 24 * 60 * 60 * 1000
+
+  store.softDeletePlay(keep, now - 1000)
+  store.softDeletePlay(gone, now - month - 1000)
+
+  const result = store.purgeDeleted(now - month)
+  assert.equal(result.plays, 1)
+
+  store.restorePlay(keep)
+  assert.equal(store.recentPlays().length, 1) // 최근에 지운 것은 살아 있다
+  store.close()
+})
+
+test('도장 탭 목록은 줄 정보를 붙여 온다 (HIST-06)', () => {
+  const { store } = tmpStore()
+  const id = store.startPlay({ sourceApp: 'Chrome', title: '믹스', channel: 'CherryMix', startedAt: 1 })
+  const a = store.addStamp({ playId: id, posSec: 410, at: 10 })
+  store.addStamp({ playId: id, posSec: 800, at: 20 })
+  store.confirmStamp(a, 30)
+
+  const all = store.allStamps()
+  assert.equal(all.length, 2)
+  assert.equal(all[0].title, '믹스')
+  assert.equal(all[0].channel, 'CherryMix')
+
+  assert.equal(store.allStamps({ onlyUnconfirmed: true }).length, 1)
+  assert.equal(store.allStamps({ channel: 'CherryMix' }).length, 2)
+  assert.equal(store.allStamps({ channel: '없는채널' }).length, 0)
+  store.close()
+})
+
+test('날짜별 청취 시간을 합친다 (HIST-07)', () => {
+  const { store } = tmpStore()
+  const day = new Date('2026-09-18T10:00:00').getTime()
+
+  const a = store.startPlay({ sourceApp: 'Chrome', title: 'A', channel: 'c', startedAt: day })
+  const b = store.startPlay({ sourceApp: 'Chrome', title: 'B', channel: 'c', startedAt: day + 3600_000 })
+  store.touchPlay(a, { listenedSec: 600 })
+  store.touchPlay(b, { listenedSec: 900 })
+
+  const totals = store.dailyTotals()
+  assert.equal(totals.length, 1)
+  assert.equal(totals[0].sec, 1500)
+  assert.equal(totals[0].n, 2)
+  store.close()
+})

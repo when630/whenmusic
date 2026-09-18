@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { toChoseong } from '../main/search.mjs'
 import { hms, normalize } from '../main/text.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -57,4 +58,39 @@ export async function demoState(variant = 'playing') {
     return { ...base, caps: { ...base.caps, isPlaybackPositionEnabled: false } }
   }
   return base
+}
+
+/**
+ * 이력 창을 눈으로 확인할 때 쓰는 샘플. 실측이 말한 모양 그대로다 —
+ * 하루 서너 줄, 1시간 안팎의 믹스, 길이를 모르는 스트림 하나.
+ */
+export function seedDemoStore(store, now = Date.now()) {
+  if (!store.ok || store.recentPlays().length) return
+
+  const H = 60 * 60 * 1000
+  const rows = [
+    { t: '[Playlist] 우연히 듣고 반해버려서… 그냥 저장해버린 노래들 🎧🤍|감성 힙합/R&B', c: 'CherryMix', d: 3731, at: now - 4 * H, listened: 3480, stamps: [410, 1268, 2648, 3100] },
+    { t: '비 오는 새벽 감성 R&B 플레이리스트', c: 'CherryMix', d: 3720, at: now - 7 * H, listened: 3720, stamps: [900, 2400] },
+    { t: 'lofi hip hop radio — beats to relax/study to', c: 'Lofi Girl', d: null, at: now - 9 * H, listened: 6060, stamps: [] },
+    { t: '새벽에 혼자 듣는 감성 알앤비', c: '밤과음악', d: 4320, at: now - 27 * H, listened: 4320, stamps: [1500] },
+    { t: '재즈 바 BGM — 늦은 밤', c: 'NightJazz', d: 5400, at: now - 31 * H, listened: 2880, stamps: [] },
+  ]
+
+  for (const r of rows) {
+    const id = store.startPlay({
+      sourceApp: 'Chrome',
+      title: r.t,
+      titleRaw: r.t,
+      titleCho: toChoseong(r.t),
+      channel: r.c,
+      channelCho: toChoseong(r.c),
+      durationSec: r.d,
+      startedAt: r.at,
+      endedAt: r.at + r.listened * 1000,
+      listenedSec: r.listened,
+      lastPosSec: r.stamps.at(-1) ?? 0,
+      posTrusted: true,
+    })
+    for (const pos of r.stamps) store.addStamp({ playId: id, posSec: pos, at: r.at + pos * 1000 })
+  }
 }

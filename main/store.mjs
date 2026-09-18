@@ -11,6 +11,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
+import { likePattern, parseQuery } from './search.mjs'
+
 /** 자기보다 높은 user_version은 열지 않는다 — 구버전으로 되돌린 사용자가 최신 스키마를 덮어쓰지 않게. */
 export class NewerSchemaError extends Error {
   constructor(found, known) {
@@ -351,9 +353,114 @@ export function createStore(file) {
     recentPlays(limit = 50) {
       if (!state.ok) return []
       return q(
-        `SELECT * FROM plays WHERE deleted_at IS NULL
+        `SELECT *, (SELECT COUNT(*) FROM stamps s
+                  WHERE s.play_id = plays.id AND s.deleted_at IS NULL) AS stampCount FROM plays WHERE deleted_at IS NULL
          ORDER BY started_at DESC LIMIT ?`
       ).all(limit)
+    },
+
+    /**
+     * 이력을 찾는다 (SRCH).
+     *
+     * 단어마다 AND로 좁히고, 각 단어는 제목이나 채널 어느 쪽에 걸려도 된다.
+     * 전부 초성 자모면 초성 컬럼을 본다.
+     */
+    searchPlays({ query = '', sourceApp = null, limit = 200 } = {}) {
+      if (!state.ok) return []
+
+      const { terms, choseong } = parseQuery(query)
+      const where = ['deleted_at IS NULL']
+      const args = []
+
+      for (const t of terms) {
+        const [a, b] = choseong ? ['title_cho', 'channel_cho'] : ['title', 'channel']
+        // 템플릿 리터럴 안에서는 백슬래시를 두 번 써야 SQL에 하나로 닿는다
+        where.push(`(${a} LIKE ? ESCAPE '\\' OR ${b} LIKE ? ESCAPE '\\')`)
+        args.push(likePattern(t), likePattern(t))
+      }
+
+      if (sourceApp) {
+        where.push('source_app = ?')
+        args.push(sourceApp)
+      }
+
+      args.push(limit)
+      return q(
+        `SELECT *, (SELECT COUNT(*) FROM stamps s
+                  WHERE s.play_id = plays.id AND s.deleted_at IS NULL) AS stampCount FROM plays WHERE ${where.join(' AND ')}
+         ORDER BY started_at DESC LIMIT ?`
+      ).all(...args)
+    },
+
+    /** 어떤 소스 앱들이 이력에 있는가 — 필터 목록을 만든다 (SRCH-04). */
+    sourceApps() {
+      if (!state.ok) return []
+      return q(
+        `SELECT source_app AS app, COUNT(*) AS n FROM plays
+         WHERE deleted_at IS NULL GROUP BY source_app ORDER BY n DESC`
+      ).all()
+    },
+
+    /** 지난 7일 동안 들은 시간 (HIST-07). 창 머리에 한 줄로 걸린다. */
+    weekSeconds(since) {
+      if (!state.ok) return 0
+      return (
+        q(
+          `SELECT COALESCE(SUM(listened_sec), 0) AS sec FROM plays
+           WHERE deleted_at IS NULL AND started_at >= ?`
+        ).get(since)?.sec ?? 0
+      )
+    },
+
+    /** 날짜별 청취 시간 합계 (HIST-07). 길이를 모르는 스트림도 관측 시간으로 센다. */
+    dailyTotals(limit = 30) {
+      if (!state.ok) return []
+      return q(
+        `SELECT date(started_at / 1000, 'unixepoch', 'localtime') AS day,
+                SUM(listened_sec) AS sec,
+                COUNT(*) AS n
+         FROM plays WHERE deleted_at IS NULL
+         GROUP BY day ORDER BY day DESC LIMIT ?`
+      ).all(limit)
+    },
+
+    // --- 삭제 (STOR-04) — 형제 앱의 소프트 삭제 규칙을 승계한다 ---
+
+    softDeletePlay(id, at) {
+      if (!state.ok) return
+      q('UPDATE plays SET deleted_at = ? WHERE id = ?').run(at, id)
+    },
+
+    restorePlay(id) {
+      if (!state.ok) return
+      q('UPDATE plays SET deleted_at = NULL WHERE id = ?').run(id)
+    },
+
+    softDeleteStamp(id, at) {
+      if (!state.ok) return
+      q('UPDATE stamps SET deleted_at = ? WHERE id = ?').run(at, id)
+    },
+
+    restoreStamp(id) {
+      if (!state.ok) return
+      q('UPDATE stamps SET deleted_at = NULL WHERE id = ?').run(id)
+    },
+
+    /** 지운 지 30일이 지난 것만 실제로 지운다 (STOR-04). */
+    purgeDeleted(before) {
+      if (!state.ok) return { plays: 0, stamps: 0 }
+
+      return withTransaction(db, () => {
+        const st = q('DELETE FROM stamps WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(before)
+        // 지워진 줄에 매달린 도장은 함께 정리한다 — 외래키가 가리킬 곳이 없어진다
+        q(
+          `DELETE FROM stamps WHERE play_id IN
+             (SELECT id FROM plays WHERE deleted_at IS NOT NULL AND deleted_at < ?)`
+        ).run(before)
+        const pl = q('DELETE FROM plays WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(before)
+
+        return { plays: Number(pl.changes), stamps: Number(st.changes) }
+      })
     },
 
     // --- 도장 (STMP) ---
@@ -380,6 +487,28 @@ export function createStore(file) {
     confirmStamp(id, at) {
       if (!state.ok) return
       q('UPDATE stamps SET confirmed_at = ? WHERE id = ?').run(at, id)
+    },
+
+    /** 도장 탭이 보여 줄 목록 (HIST-06). 줄 정보를 함께 붙여 온다. */
+    allStamps({ onlyUnconfirmed = false, channel = null, limit = 200 } = {}) {
+      if (!state.ok) return []
+
+      const where = ['s.deleted_at IS NULL', 'p.deleted_at IS NULL']
+      const args = []
+
+      if (onlyUnconfirmed) where.push('s.confirmed_at IS NULL')
+      if (channel) {
+        where.push('p.channel = ?')
+        args.push(channel)
+      }
+
+      args.push(limit)
+      return q(
+        `SELECT s.*, p.title, p.channel, p.source_app, p.thumb_id, p.duration_sec
+         FROM stamps s JOIN plays p ON p.id = s.play_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY s.at DESC LIMIT ?`
+      ).all(...args)
     },
 
     unconfirmedCount() {

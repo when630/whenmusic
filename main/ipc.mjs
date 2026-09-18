@@ -10,6 +10,15 @@ export const CH = {
   CTL: 'ctl', // { action, appId, sec? }
   STAMP: 'stamp', // 지금 위치에 도장
   HOVER: 'card:hover', // 카드 위 마우스 — 클릭 통과를 잠깐 끈다
+
+  // window ↔ main (전부 invoke/handle — 창은 답을 받아야 그린다)
+  QUERY: 'hist:query', // { tab, query, filter } → rows
+  RESUME: 'hist:resume', // { playId } | { stampId } — 그 지점부터 이어 재생
+  REMOVE: 'hist:remove', // 소프트 삭제 (STOR-04)
+  RESTORE: 'hist:restore', // U로 되돌리기
+  SETTINGS: 'settings:get',
+  SET_SETTING: 'settings:set',
+  OPEN_DATA_DIR: 'data:open', // 설정 화면이 데이터 폴더를 열어 준다 (DATA-03)
 }
 
 /** `ctl` 채널이 받는 동작. 이 밖의 값은 무시된다. */

@@ -1,12 +1,14 @@
 // 앱 부트. 배선만 한다 — 계산은 session.mjs, 창은 card.mjs, 애드온은 control.mjs.
-import { app, globalShortcut, ipcMain } from 'electron'
+import { app, globalShortcut, ipcMain, shell } from 'electron'
 import path from 'node:path'
 
 import { createCard } from './card.mjs'
 import { createControl } from './control.mjs'
 import { ACTION, CH } from './ipc.mjs'
 import { PLAYBACK, createTracker } from './session.mjs'
+import { createSettings } from './settings.mjs'
 import { createStore } from './store.mjs'
+import { createWindow } from './window.mjs'
 
 app.setName('whenmusic')
 
@@ -30,11 +32,18 @@ const demoAt = process.argv.indexOf('--demo')
 const demoName = demoAt >= 0 ? (process.argv[demoAt + 1] ?? 'playing') : null
 
 // %APPDATA%\whenmusic\store.sqlite — 형제 앱과 폴더가 다르다 (PLAT-05)
-const store = createStore(path.join(app.getPath('userData'), 'store.sqlite'))
+// 데모는 임시 폴더를 쓴다 — 눈으로 확인하자고 진짜 기록을 더럽힐 이유가 없다
+const DATA_DIR = demoName
+  ? path.join(app.getPath('temp'), 'whenmusic-demo')
+  : app.getPath('userData')
+const store = createStore(path.join(DATA_DIR, 'store.sqlite'))
 if (store.state.notice) console.warn('[store]', store.state.notice)
 
-const tracker = createTracker({ backSec: BACK_SEC, store })
-const card = createCard()
+const settings = createSettings(path.join(DATA_DIR, 'settings.json'))
+
+const tracker = createTracker({ backSec: settings.get('backSec') ?? BACK_SEC, store })
+const card = createCard({ corner: settings.get('corner') })
+const historyWindow = createWindow({ settings })
 let control = null
 let tickTimer = null
 
@@ -52,7 +61,13 @@ function paint() {
   if (demo) return card.push(demo)
 
   const snap = tracker.snapshot()
-  card.push({ ...snap, artUrl: artOf(snap.appId), flash: flashOnce })
+  card.push({
+    ...snap,
+    artUrl: artOf(snap.appId),
+    flash: flashOnce,
+    backSec: settings.get('backSec') ?? BACK_SEC,
+    blur: settings.get('blur') ?? 6,
+  })
   flashOnce = null
 
   if (snap.state === 'empty') {
@@ -125,7 +140,7 @@ function wireControl() {
 }
 
 // CTL-03 — 지금 위치에서 10초 뒤로. 절대 시크만 가능하므로 목표를 직접 계산한다.
-async function rewind(sec = BACK_SEC) {
+async function rewind(sec = settings.get('backSec') ?? BACK_SEC) {
   const id = tracker.currentId
   if (!id || !control) return
 
@@ -203,15 +218,125 @@ function stamp() {
   paint()
 }
 
+
+// --- 이력 창이 묻는 것들 -------------------------------------------------
+
+// 썸네일은 창이 열릴 때마다 굽지 않는다. 같은 영상을 며칠에 걸쳐 들으면
+// 같은 thumb_id가 계속 나온다.
+const thumbCache = new Map()
+function thumbUrl(id) {
+  if (id == null) return null
+  if (thumbCache.has(id)) return thumbCache.get(id)
+
+  const png = store.thumb(id)
+  const url = png ? `data:image/png;base64,${Buffer.from(png).toString('base64')}` : null
+  thumbCache.set(id, url)
+  return url
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+function weekText() {
+  const sec = store.weekSeconds(Date.now() - WEEK_MS)
+  if (!sec) return ''
+
+  const m = Math.round(sec / 60)
+  const h = Math.floor(m / 60)
+  return h > 0 ? `이번 주 ${h}시간 ${m % 60}분` : `이번 주 ${m}분`
+}
+
+function wireWindowIpc() {
+  ipcMain.handle(CH.QUERY, (_e, { tab, query, onlyUnconfirmed }) => {
+    const rows =
+      tab === 'plays'
+        ? store.searchPlays({ query })
+        : store.allStamps({ onlyUnconfirmed })
+
+    return {
+      rows: rows.map((r) => ({ ...r, thumbUrl: thumbUrl(r.thumb_id) })),
+      weekText: weekText(),
+      unconfirmed: store.unconfirmedCount(),
+    }
+  })
+
+  /**
+   * HIST-05 · STMP-04 — 그 지점부터 이어 듣는다.
+   *
+   * 같은 세션이 아직 살아 있으면 시크로 끝난다. 아니면 소스 URL이 필요한데
+   * SMTC가 videoId를 주지 않으므로(오픈이슈 #1) 제목으로 유튜브 검색을 연다.
+   */
+  ipcMain.handle(CH.RESUME, async (_e, { playId, stampId }) => {
+    const stamp = stampId != null ? store.allStamps({ limit: 500 }).find((s) => s.id === stampId) : null
+    const play = store.play(stamp?.play_id ?? playId)
+    if (!play) return false
+
+    const target = stamp ? stamp.pos_sec : (play.last_pos_sec ?? 0)
+    const live = tracker.currentId === play.source_app
+
+    if (live && control) {
+      try {
+        await control.seek(play.source_app, target)
+        tracker.assumeSeek(play.source_app, target)
+        if (stamp) store.confirmStamp(stamp.id, Date.now())
+        paint()
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    await shell.openExternal(
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(play.title)}`
+    )
+    return false
+  })
+
+  ipcMain.handle(CH.REMOVE, (_e, { kind, id }) => {
+    const at = Date.now()
+    if (kind === 'play') store.softDeletePlay(id, at)
+    else store.softDeleteStamp(id, at)
+    return true
+  })
+
+  ipcMain.handle(CH.RESTORE, (_e, { kind, id }) => {
+    if (kind === 'play') store.restorePlay(id)
+    else store.restoreStamp(id)
+    return true
+  })
+
+  ipcMain.handle(CH.SETTINGS, () => ({ ...settings.all, dataDir: DATA_DIR }))
+
+  ipcMain.handle(CH.SET_SETTING, (_e, key, value) => {
+    settings.set(key, value)
+    applySetting(key, value)
+    return { ...settings.all, dataDir: DATA_DIR }
+  })
+
+  ipcMain.handle(CH.OPEN_DATA_DIR, () => shell.openPath(DATA_DIR))
+}
+
+// 설정은 바꾸는 즉시 적용된다 — 저장하고 다시 시작하라고 말하지 않는다.
+function applySetting(key, value) {
+  if (key === 'corner') card.setCorner(value)
+  if (key === 'autoStart') app.setLoginItemSettings({ openAtLogin: !!value, args: ['--hidden'] })
+  // backSec·blur는 다음 그리기에 실린다
+  paint()
+}
+
 function wireShortcuts() {
   // 형제 앱과 겹치지 않는다 (PLAT-05)
   globalShortcut.register('Control+Alt+Left', () => rewind())
   globalShortcut.register('Control+Alt+S', stamp)
+  globalShortcut.register('Control+Alt+P', () => historyWindow.toggle())
 }
 
 app.whenReady().then(async () => {
   wireControl()
   wireIpc()
+  wireWindowIpc()
+
+  // 지운 지 30일이 지난 것만 실제로 지운다 (STOR-04)
+  store.purgeDeleted(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
   if (smoke) {
     // 창 없는 스모크 — 부트와 애드온 로드만 확인하고 나간다
@@ -224,8 +349,9 @@ app.whenReady().then(async () => {
   }
 
   if (demoName) {
-    const { demoState } = await import('../tools/demo-state.mjs')
+    const { demoState, seedDemoStore } = await import('../tools/demo-state.mjs')
     demo = await demoState(demoName)
+    seedDemoStore(store)
   }
 
   card.start()
@@ -236,12 +362,19 @@ app.whenReady().then(async () => {
   }, TICK_MS)
 
   if (shotFile) {
+    const shotWindow = process.argv.includes('--window')
+    if (shotWindow) historyWindow.toggle()
+
     setTimeout(async () => {
       paint()
       setTimeout(async () => {
-        await card.capture(shotFile, { open: process.argv.includes('--open') })
+        if (shotWindow) {
+          const tabAt = process.argv.indexOf('--tab')
+          await historyWindow.capture(shotFile, { tab: tabAt >= 0 ? process.argv[tabAt + 1] : null })
+        }
+        else await card.capture(shotFile, { open: process.argv.includes('--open') })
         app.exit(0)
-      }, 400)
+      }, 600)
     }, 1200)
   }
 })
@@ -255,5 +388,6 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   control?.stop()
   card.destroy()
+  historyWindow.destroy()
   store.close()
 })

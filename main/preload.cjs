@@ -9,4 +9,13 @@ contextBridge.exposeInMainWorld('whenmusic', {
   ctl: (msg) => ipcRenderer.send('ctl', msg),
   stamp: () => ipcRenderer.send('stamp'),
   hover: (on) => ipcRenderer.send('card:hover', !!on),
+
+  // 이력 창 — 답을 받아야 그리므로 전부 invoke다
+  query: (args) => ipcRenderer.invoke('hist:query', args),
+  resume: (args) => ipcRenderer.invoke('hist:resume', args),
+  remove: (args) => ipcRenderer.invoke('hist:remove', args),
+  restore: (args) => ipcRenderer.invoke('hist:restore', args),
+  settings: () => ipcRenderer.invoke('settings:get'),
+  setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  openDataDir: () => ipcRenderer.invoke('data:open'),
 })

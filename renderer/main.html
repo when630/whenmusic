@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>WHENMUSIC</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="main.css">
+</head>
+<body>
+
+<header>
+  <span class="brand"><i></i>WHENMUSIC</span>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="plays" class="on">이력</button>
+    <button data-tab="stamps">도장 <span class="badge" id="badge" hidden>0</span></button>
+    <button data-tab="settings">설정</button>
+  </nav>
+
+  <span class="week" id="week"></span>
+</header>
+
+<div class="search" id="search" hidden>
+  <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 119.5 5a4.5 4.5 0 010 9z"/></svg>
+  <input id="q" placeholder="제목·채널로 찾기 — 초성도 됩니다" autocomplete="off" spellcheck="false">
+  <span class="cho" id="cho" hidden>초성</span>
+</div>
+
+<main id="list" tabindex="-1"></main>
+
+<footer>
+  <span id="hint">한 줄이 한 번 들은 믹스다</span>
+  <span class="keys">
+    <kbd>/</kbd> 찾기 <kbd>Enter</kbd> 이어 듣기 <kbd>X</kbd> 지움 <kbd>U</kbd> 되돌림 <kbd>?</kbd> 도움말
+  </span>
+</footer>
+
+<div class="sheet" id="help" hidden>
+  <div class="sheet-body">
+    <h2>키보드</h2>
+    <dl>
+      <dt><kbd>Tab</kbd></dt><dd>다음 탭 (<kbd>Shift+Tab</kbd> 이전)</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd> / <kbd>J</kbd> <kbd>K</kbd></dt><dd>줄 사이 이동</dd>
+      <dt><kbd>Enter</kbd></dt><dd>그 지점부터 이어 듣기</dd>
+      <dt><kbd>X</kbd></dt><dd>지움 — 30일 안에는 되살릴 수 있다</dd>
+      <dt><kbd>U</kbd></dt><dd>방금 지운 것을 되돌림</dd>
+      <dt><kbd>/</kbd></dt><dd>찾기 — 초성도 걸린다</dd>
+      <dt><kbd>F</kbd></dt><dd>도장 탭에서 확인 안 한 것만 보기</dd>
+      <dt><kbd>Esc</kbd></dt><dd>찾기를 닫거나 창을 닫는다</dd>
+      <dt><kbd>Ctrl+Alt+P</kbd></dt><dd>어디서든 이 창을 열고 닫는다</dd>
+    </dl>
+    <p class="close-hint"><kbd>Esc</kbd> 또는 <kbd>?</kbd>로 닫기</p>
+  </div>
+</div>
+
+<script src="main.js" type="module"></script>
+</body>
+</html>

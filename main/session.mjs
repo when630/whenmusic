@@ -4,6 +4,7 @@
 // 이 앱에서 제일 틀리기 쉬운 계산이 여기 모여 있어서, 실제 세션 없이 테스트로
 // 못 박아 두는 편이 낫다.
 
+import { toChoseong } from './search.mjs'
 import { hms, normalize } from './text.mjs'
 
 /** SMTC PlaybackStatus. 애드온 constant.js와 같은 값이다. */
@@ -147,6 +148,8 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
     } else {
       playId = store.startPlay({
         ...key,
+        titleCho: toChoseong(key.title),
+        channelCho: toChoseong(key.channel),
         titleRaw: s.media?.title ?? '',
         durationSec: s.timeline?.duration || null,
         thumbId: store.putThumb(s.media?.thumbnail),
