@@ -16,13 +16,14 @@
 
 ## 현재 상태
 
-**개발 전. 설치 파일은 아직 없습니다.**
+**개발 중. 설치 파일은 아직 없습니다.**
 
 | 단계 | 상태 |
 |---|---|
 | Phase 0 — PoC | **끝남.** 읽기·세션 지목 제어·절대 시크를 실측으로 확인 (`poc/`) |
-| Phase 1 — 애드온에 제어 더하기 | **진행 중.** 포크 완료, 남은 일은 제어 메서드 6종 노출과 CI 빌드 |
-| Phase 2 이후 | 앱 구현 |
+| Phase 1 — 애드온에 제어 더하기 | **끝남 (2026-09-18).** 제어 6종을 포크에 노출하고 CI에서 세 타겟을 빌드해 [v1.1.0](https://github.com/when630/node-windows-smtc-monitor/releases/tag/v1.1.0)으로 릴리스. x64 바이너리는 `vendor/` |
+| Phase 2 — 카드 | **진행 중.** position 보간과 세션 분할 규칙까지 |
+| Phase 3 이후 | 도장 · 이력 창 · 릴리스 |
 
 네이티브 애드온은 [when630/node-windows-smtc-monitor](https://github.com/when630/node-windows-smtc-monitor)(Rust + napi-rs, MIT)를 씁니다. upstream은 [LeagueTavern/node-windows-smtc-monitor](https://github.com/LeagueTavern/node-windows-smtc-monitor)이고, 읽기 전용이라 제어를 더하려고 포크했습니다.
 

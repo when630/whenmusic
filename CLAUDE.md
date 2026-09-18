@@ -18,11 +18,12 @@
 
 ## 현재 단계
 
-**Phase 1 — 애드온에 제어 더하기.** 포크는 끝났다: **[when630/node-windows-smtc-monitor](https://github.com/when630/node-windows-smtc-monitor)** (Rust + napi-rs, MIT, upstream `LeagueTavern/node-windows-smtc-monitor`). 남은 일은 제어 메서드 6종 노출(`docs/03_기술_스펙.md` §8)과 GitHub Actions 빌드다.
+**Phase 2 — 카드.** CARD·CTL 요구사항을 화면에 붙이는 단계다.
 
-Phase 0(PoC)은 끝났다 — 읽기·세션 지목 제어·절대 시크가 실측으로 확인됐다.
-
-> 이 저장소(`whenmusic`)는 **아직 `git init` 전이다.** 개발 시작 전에 초기화한다.
+Phase 0(PoC)과 Phase 1(애드온)은 끝났다.
+- 포크 **[when630/node-windows-smtc-monitor](https://github.com/when630/node-windows-smtc-monitor) v1.1.0** — 제어 6종(`docs/03_기술_스펙.md` §8)을 노출했고 CI가 x64·ia32·arm64를 빌드해 릴리스에 붙인다
+- x64 바이너리는 **`vendor/`에 커밋돼 있다**([D-20](docs/03_기술_스펙.md#d-20-애드온은-npm에-퍼블리시하지-않고-릴리스의-node를-쓴다)). npm 퍼블리시는 하지 않는다. 갱신 방법은 `vendor/README.md`
+- `main/session.mjs`에 position 보간·세션 분할·중복 이벤트 판정이 순수 함수로 들어가 있다 (`test/session.test.mjs`)
 
 ## 밟으면 아픈 함정 (전부 실측으로 확인된 것)
 
