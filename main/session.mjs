@@ -4,6 +4,8 @@
 // 이 앱에서 제일 틀리기 쉬운 계산이 여기 모여 있어서, 실제 세션 없이 테스트로
 // 못 박아 두는 편이 낫다.
 
+import { hms, normalize } from './text.mjs'
+
 /** SMTC PlaybackStatus. 애드온 constant.js와 같은 값이다. */
 export const PLAYBACK = {
   CLOSED: 0,
@@ -86,4 +88,196 @@ export function cardState({ session, anchor, addonFailed = false }) {
   if (!session) return 'empty'
   if (session.playback?.playbackStatus !== PLAYBACK.PLAYING) return 'paused'
   return anchor?.trusted ? 'playing' : 'stale'
+}
+
+// --- 추적기 ---------------------------------------------------------------
+//
+// SMTC 이벤트를 받아 "지금 무엇을 제어 중이고 어디까지 흘렀는가"를 들고 있는다.
+// 시계를 주입받으므로 이것도 테스트된다.
+
+
+export function createTracker({ clock = Date.now, backSec = 10 } = {}) {
+  const sessions = new Map() // appId -> MediaInfo
+  const anchors = new Map() // appId -> anchor
+  const caps = new Map() // appId -> PlaybackCapabilities
+  let currentId = null
+  let addonFailure = null
+
+  function adopt(info, { trusted }) {
+    if (!info?.sourceAppId) return
+    const id = info.sourceAppId
+
+    sessions.set(id, info)
+    anchors.set(
+      id,
+      makeAnchor({
+        posSec: info.timeline?.position ?? 0,
+        status: info.playback?.playbackStatus ?? PLAYBACK.CLOSED,
+        atMs: clock(),
+        trusted,
+      })
+    )
+    if (currentId == null) currentId = id
+  }
+
+  function reanchor(id, { posSec, status }) {
+    const prev = anchors.get(id)
+    anchors.set(
+      id,
+      makeAnchor({
+        posSec: posSec ?? prev?.posSec ?? 0,
+        status: status ?? prev?.status ?? PLAYBACK.CLOSED,
+        atMs: clock(),
+        trusted: true, // 이벤트로 잡은 기준점은 믿는다 (§5)
+      })
+    )
+  }
+
+  return {
+    /**
+     * 앱이 켜질 때 이미 있던 세션들. 이 위치가 얼마나 낡았는지 알 길이 없으므로
+     * 믿지 않는다 — 실측에서 8분까지 낡아 있었다 (§5).
+     */
+    seed(list) {
+      for (const info of list ?? []) adopt(info, { trusted: false })
+    },
+
+    onEvent({ name, payload }) {
+      const id = payload?.appId
+
+      switch (name) {
+        case 'sessions':
+          for (const info of payload.sessions ?? []) {
+            const had = sessions.has(info.sourceAppId)
+            adopt(info, { trusted: had ? (anchors.get(info.sourceAppId)?.trusted ?? false) : false })
+          }
+          break
+
+        case 'session-added':
+          adopt(payload.media, { trusted: true })
+          break
+
+        case 'session-removed':
+          sessions.delete(id)
+          anchors.delete(id)
+          caps.delete(id)
+          if (currentId === id) currentId = sessions.keys().next().value ?? null
+          break
+
+        case 'current-changed':
+          if (sessions.has(id)) currentId = id
+          break
+
+        case 'media-changed': {
+          const s = sessions.get(id)
+          if (s) s.media = payload.mediaProps
+          break
+        }
+
+        case 'playback-changed': {
+          const s = sessions.get(id)
+          if (!s) break
+          // 같은 상태로 두 번 오는 이벤트는 버린다 (D-15)
+          if (isRedundantPlayback(s.playback, payload.playbackInfo)) break
+
+          s.playback = payload.playbackInfo
+          // 상태가 바뀌는 순간이 SMTC가 위치를 갱신하는 유일한 때다.
+          // 여기서 기준점을 다시 잡아야 낡음이 복구된다 (§5).
+          reanchor(id, { status: payload.playbackInfo.playbackStatus })
+          break
+        }
+
+        case 'timeline-changed': {
+          const s = sessions.get(id)
+          if (!s) break
+          s.timeline = payload.timelineProps
+          reanchor(id, { posSec: payload.timelineProps.position })
+          break
+        }
+      }
+    },
+
+    /** 제어 명령을 보낸 직후, 이벤트가 오기 전에 카드를 먼저 맞춘다 (D-14). */
+    assume(id, status) {
+      const s = sessions.get(id)
+      if (!s) return
+      s.playback = { ...s.playback, playbackStatus: status }
+      reanchor(id, { status })
+    },
+
+    /** 시크한 위치를 즉시 반영한다. timeline-changed가 뒤따라 확정한다. */
+    assumeSeek(id, posSec) {
+      reanchor(id, { posSec })
+    },
+
+    setCaps(id, value) {
+      if (value) caps.set(id, value)
+    },
+
+    setFailure(f) {
+      addonFailure = f
+    },
+
+    pick(id) {
+      if (sessions.has(id)) currentId = id
+    },
+
+    get currentId() {
+      return currentId
+    },
+
+    get count() {
+      return sessions.size
+    },
+
+    /** 지금 위치. 되감기가 이 값을 기준으로 목표를 만든다 (CTL-03). */
+    positionOf(id) {
+      const s = sessions.get(id)
+      return interpolate(anchors.get(id), clock(), s?.timeline?.duration ?? null)
+    },
+
+    /** 카드가 그릴 것 (§6 · §9 `now`). */
+    snapshot() {
+      if (addonFailure) {
+        return {
+          state: 'error',
+          title: 'SMTC에 연결하지 못했습니다',
+          sub: 'Windows 10 1809(10.0.17763) 이상이 필요합니다',
+          backSec,
+        }
+      }
+
+      const id = currentId
+      const s = id ? sessions.get(id) : null
+      const anchor = id ? anchors.get(id) : null
+      const state = cardState({ session: s, anchor })
+
+      if (!s) {
+        return {
+          state,
+          title: '재생 중인 것이 없습니다',
+          sub: '재생을 시작하면 여기 뜹니다',
+          backSec,
+        }
+      }
+
+      const durSec = s.timeline?.duration ?? 0
+      const posSec = interpolate(anchor, clock(), durSec > 0 ? durSec : null)
+      const channel = normalize(s.media?.artist ?? '')
+
+      return {
+        state,
+        appId: id,
+        app: id,
+        title: normalize(s.media?.title ?? '') || '(제목 없음)',
+        sub: sessions.size > 1 ? `${channel} · 세션 ${sessions.size}개` : channel,
+        posSec,
+        durSec,
+        nowText: hms(posSec),
+        durText: hms(durSec),
+        caps: caps.get(id) ?? null,
+        backSec,
+      }
+    },
+  }
 }

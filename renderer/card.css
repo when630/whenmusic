@@ -1,0 +1,242 @@
+/* 코너 카드 — design/mockups/card-options.html §0의 확정안 ㉤ 그대로.
+   블러 6px, 전면 덮개 대신 좌측 띠 + text-shadow (D-09). */
+
+/* 클래스가 display를 지정하면 hidden 속성이 먹지 않는다. 한 번에 막는다 */
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  /* 창(280×200)의 우하단에 카드를 붙인다. 남는 자리는 호버 확장용이다 */
+  display: flex;
+  align-items: flex-end;
+  height: 100vh;
+  padding: 0;
+}
+
+.card {
+  position: relative;
+  width: 248px;
+  margin-left: auto;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 7px 26px rgba(0, 0, 0, 0.5);
+  background: rgba(18, 21, 27, 0.96);
+  padding: 11px 12px 10px;
+  overflow: hidden;
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+/* 썸네일은 정보가 아니라 분위기다. 16:9 영상 커버라 곡과 무관하다 (D-09) */
+.art {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  filter: blur(6px);
+  transform: scale(1.2);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.art.has {
+  opacity: 1;
+}
+
+.veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(14, 16, 21, 0.94) 38%,
+    rgba(14, 16, 21, 0.62) 72%,
+    rgba(14, 16, 21, 0.42)
+  );
+}
+
+.body {
+  position: relative;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.meta .t {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 1.38;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.meta .a {
+  font-size: 10.5px;
+  color: #b9c0cd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+}
+.row.bar-row {
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.src {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: #7a94c4;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 1px 7px 1px 5px;
+}
+.src .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--accent);
+  flex: none;
+}
+
+.ctl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  margin-left: auto;
+}
+.ctl button {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  cursor: default;
+}
+.ctl button:hover:not([disabled]) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.ctl button.big {
+  width: 29px;
+  height: 29px;
+  background: var(--music-dim);
+  color: var(--music);
+}
+.ctl button.stamp {
+  color: var(--music);
+}
+/* CTL-07 — 세션이 못 받는 명령은 눌리지 않게 보여 준다.
+   눌리는데 아무 일도 안 일어나면 고장으로 읽힌다 */
+.ctl button[disabled] {
+  opacity: 0.32;
+}
+.ctl svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+.ctl button.big svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tm {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.bar {
+  height: 3px;
+  border-radius: 3px;
+  /* 이미지 위에 놓이므로 흰빛이 아니라 검정 반투명이어야 보인다 (D-09) */
+  background: rgba(0, 0, 0, 0.42);
+  position: relative;
+  flex: 1;
+}
+.bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--music);
+  transition: width 240ms linear;
+}
+
+/* 도장 눈금 (CARD-07 · STMP-06). 방금 찍은 것은 밝게, 이전 것은 흐리게 */
+.mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 9px;
+  background: var(--music);
+  box-shadow: 0 0 6px var(--music);
+  border-radius: 1px;
+}
+.mark.old {
+  background: rgba(187, 154, 247, 0.45);
+  box-shadow: none;
+  height: 7px;
+  top: -2px;
+}
+
+/* 상태 (§6 · CARD-10) */
+.card[data-state='paused'] {
+  filter: saturate(0.55);
+  opacity: 0.72;
+}
+/* 기준점이 낡았다 — 위치를 단정하지 않는다 (§5) */
+.card[data-state='stale'] .tm,
+.card[data-state='stale'] .bar > i {
+  opacity: 0.5;
+}
+.card[data-state='empty'] .art,
+.card[data-state='error'] .art {
+  display: none;
+}
+.card[data-state='empty'] .ctl,
+.card[data-state='error'] .ctl,
+.card[data-state='empty'] #progress,
+.card[data-state='error'] #progress {
+  display: none;
+}
+.card[data-state='error'] .t {
+  color: var(--warning);
+}
+
+/* 되감은 직후·도장 직후 1.4초 (STMP-02 · CTL-03) */
+.card.flash {
+  box-shadow: 0 7px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--music);
+}
+.card.flash .a {
+  color: var(--music);
+}
