@@ -111,7 +111,10 @@ function drawStamps(stamps, durSec) {
   const newest = stamps.length ? Math.max(...stamps.map((s) => s.at)) : 0
   for (const s of stamps) {
     const mark = document.createElement('span')
-    mark.className = s.at === newest ? 'mark' : 'mark old'
+    // 위치를 믿을 수 없는 상태에서 찍힌 눈금은 흐리게 — 진행바에 박혀 있는
+    // 막대가 정확한 자리인 것처럼 보이면 안 된다 (D-23)
+    mark.className =
+      (s.at === newest ? 'mark' : 'mark old') + (s.trusted === false ? ' approx' : '')
     mark.style.left = `${Math.min(100, (s.posSec / durSec) * 100)}%`
     mark.dataset.pos = String(s.posSec)
     el.bar.appendChild(mark)

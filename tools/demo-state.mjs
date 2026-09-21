@@ -41,9 +41,10 @@ export async function demoState(variant = 'playing') {
       isPlaybackPositionEnabled: true,
     },
     stamps: [
-      { posSec: 410, at: 1 },
-      { posSec: 1268, at: 2 },
-      { posSec: 2648, at: 3 },
+      // 첫 번째는 낡은 기준점에서 찍힌 것 — 눈금이 흐려야 한다 (D-23)
+      { posSec: 410, at: 1, trusted: false },
+      { posSec: 1268, at: 2, trusted: true },
+      { posSec: 2648, at: 3, trusted: true },
     ],
   }
 

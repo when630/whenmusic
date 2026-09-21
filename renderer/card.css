@@ -23,17 +23,62 @@ body {
   padding: 0;
 }
 
+/* 평소에는 원 하나다. 지금 무엇이 흐르는지만 말하고 자리를 비운다 —
+   조작할 일이 있을 때만 마우스가 오고, 그때 카드로 펼쳐진다. */
 .card {
   position: relative;
-  width: 248px;
+  width: 56px;
+  height: 56px;
   margin-left: auto;
-  border-radius: var(--r-md);
+  border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 7px 26px rgba(0, 0, 0, 0.5);
   background: rgba(18, 21, 27, 0.96);
-  padding: 11px 12px 10px;
+  padding: 0;
   overflow: hidden;
-  transition: opacity 140ms ease, filter 140ms ease;
+  transition:
+    width 180ms ease,
+    height 180ms ease,
+    border-radius 180ms ease,
+    padding 180ms ease,
+    opacity 140ms ease,
+    filter 140ms ease;
+}
+
+.card.open {
+  width: 248px;
+  height: auto;
+  border-radius: var(--r-md);
+  padding: 11px 12px 10px;
+}
+
+/* 접혀 있을 때 — 글자가 없으니 썸네일을 가릴 이유도 없다 (D-09의 반대쪽) */
+.card:not(.open) .body {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.card:not(.open) .veil {
+  opacity: 0;
+}
+.card:not(.open) .art {
+  filter: none;
+  transform: none;
+}
+/* 재생 중일 때만 테두리가 산다 — 원 하나로 상태를 말한다 */
+.card:not(.open)[data-state='playing'],
+.card:not(.open)[data-state='stale'] {
+  border-color: var(--music);
+  box-shadow: 0 7px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--music-dim);
+}
+.card:not(.open)[data-state='error'] {
+  border-color: var(--warning);
+}
+/* 썸네일이 없으면 빈 원이 된다 — 그 자체로 "아직 아무것도 없다"는 말이다 */
+.card:not(.open) .art:not(.has) {
+  background: var(--music-dim);
+  opacity: 1;
 }
 
 /* 썸네일은 정보가 아니라 분위기다. 16:9 영상 커버라 곡과 무관하다 (D-09) */
@@ -45,7 +90,7 @@ body {
   filter: blur(6px);
   transform: scale(1.2);
   opacity: 0;
-  transition: opacity 220ms ease;
+  transition: opacity 220ms ease, filter 180ms ease, transform 180ms ease;
 }
 .art.has {
   opacity: 1;
@@ -54,6 +99,7 @@ body {
 .veil {
   position: absolute;
   inset: 0;
+  transition: opacity 140ms ease;
   background: linear-gradient(
     100deg,
     rgba(14, 16, 21, 0.94) 38%,
@@ -255,6 +301,12 @@ body {
   box-shadow: none;
   height: 7px;
   top: -2px;
+}
+/* 낡은 기준점에서 찍혀 위치가 근사인 눈금 (D-23) */
+.mark.approx {
+  width: 1px;
+  opacity: 0.45;
+  box-shadow: none;
 }
 
 /* 상태 (§6 · CARD-10) */
