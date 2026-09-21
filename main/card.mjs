@@ -180,6 +180,15 @@ export function createCard({ corner = 'br' } = {}) {
         await new Promise((r) => setTimeout(r, 220))
       }
 
+      // 개발용 — 펼친 카드의 실제 높이를 알려 준다 (전환 애니메이션 값 맞추기)
+      if (open) {
+        const box = await win.webContents.executeJavaScript(
+          "JSON.stringify(document.getElementById('card').getBoundingClientRect())"
+        )
+        const r = JSON.parse(box)
+        console.log(`[card] 펼친 크기 ${Math.round(r.width)}x${Math.round(r.height)}`)
+      }
+
       const image = await win.webContents.capturePage()
       const { writeFile } = await import('node:fs/promises')
       await writeFile(file, image.toPNG())

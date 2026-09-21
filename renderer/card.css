@@ -6,6 +6,14 @@
   display: none !important;
 }
 
+/* 펼침·접힘이 한 몸으로 움직이게 타이밍을 한 곳에 둔다.
+   감속이 강한 곡선이라 끝이 스르르 멎는다 — 상주하는 물건이 툭툭 끊기면
+   시선을 뺏는다. */
+:root {
+  --swap: 240ms;
+  --ease-swap: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 html, body {
   background: transparent;
   overflow: hidden;
@@ -37,17 +45,20 @@ body {
   padding: 0;
   overflow: hidden;
   transition:
-    width 180ms ease,
-    height 180ms ease,
-    border-radius 180ms ease,
-    padding 180ms ease,
+    width var(--swap) var(--ease-swap),
+    height var(--swap) var(--ease-swap),
+    border-radius var(--swap) var(--ease-swap),
+    padding var(--swap) var(--ease-swap),
+    background-color var(--swap) var(--ease-swap),
+    box-shadow var(--swap) var(--ease-swap),
     opacity 140ms ease,
     filter 140ms ease;
 }
 
+/* 높이를 고정값으로 둔다 — auto는 전환되지 않아서 펼칠 때 위쪽이 툭 튄다 */
 .card.open {
   width: 248px;
-  height: auto;
+  height: 163px;
   border-radius: var(--r-md);
   padding: 11px 12px 10px;
 }
@@ -66,17 +77,38 @@ body {
   inset: 8px;
   border-radius: 50%;
 }
+/* 썸네일도 같은 곡선으로 따라 움직인다 */
+.art,
+.veil {
+  transition:
+    top var(--swap) var(--ease-swap),
+    right var(--swap) var(--ease-swap),
+    bottom var(--swap) var(--ease-swap),
+    left var(--swap) var(--ease-swap),
+    border-radius var(--swap) var(--ease-swap),
+    opacity 200ms ease;
+}
 .card:not(.open) .art {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
   background-color: rgba(18, 21, 27, 0.96);
 }
 
 /* 접혀 있을 때 — 글자가 없으니 썸네일을 가릴 이유도 없다 (D-09의 반대쪽) */
+.body {
+  /* 펼침이 거의 끝난 뒤에 글자가 든다. 크기와 내용이 동시에 움직이면
+     어느 쪽도 따라 읽히지 않는다 */
+  transition:
+    opacity 150ms ease 90ms,
+    transform 200ms var(--ease-swap) 60ms;
+}
 .card:not(.open) .body {
   position: absolute;
   inset: 0;
   opacity: 0;
+  transform: translateY(5px);
   pointer-events: none;
+  /* 접힐 때는 먼저 비켜 준다 — 기다렸다 사라지면 글자가 뭉개지며 줄어든다 */
+  transition: opacity 110ms ease, transform 110ms ease;
 }
 .card:not(.open) .veil {
   opacity: 0;
@@ -109,7 +141,6 @@ body {
   filter: blur(6px);
   transform: scale(1.2);
   opacity: 0;
-  transition: opacity 220ms ease, filter 180ms ease, transform 180ms ease;
 }
 .art.has {
   opacity: 1;
@@ -191,6 +222,9 @@ circle.ring-dot {
   font-weight: 600;
   letter-spacing: -0.2px;
   line-height: 1.38;
+  /* 카드 높이가 고정이라 제목이 한 줄이어도 두 줄 자리를 잡아 둔다 —
+     안 그러면 진행바가 카드 아래에서 떠 버린다 */
+  min-height: calc(12px * 1.38 * 2);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -224,7 +258,10 @@ circle.ring-dot {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
-  transition: max-height 160ms ease, opacity 160ms ease, margin-bottom 160ms ease;
+  transition:
+    max-height var(--swap) var(--ease-swap),
+    opacity 150ms ease 90ms,
+    margin-bottom var(--swap) var(--ease-swap);
 }
 .card.open .extra {
   max-height: 30px;
