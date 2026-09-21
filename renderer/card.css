@@ -35,8 +35,10 @@ body {
    조작할 일이 있을 때만 마우스가 오고, 그때 카드로 펼쳐진다. */
 .card {
   position: relative;
-  width: 68px;
-  height: 68px;
+  /* 링(지름 68)보다 크다 — 진행 점의 번짐이 잘리지 않을 만큼 여유를 둔다.
+     남는 자리는 배경이 투명해 보이지 않고, 호버 타깃만 넉넉해진다 */
+  width: 88px;
+  height: 88px;
   margin-left: auto;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -79,26 +81,8 @@ body {
    카드의 배경과 그림자는 썸네일 쪽으로 넘긴다 — 링이 그려질 자리를
    어두운 판이 차지하고 있으면 고리로 보이지 않는다. */
 .card:not(.open) {
-  overflow: visible;
   background: transparent;
   box-shadow: none;
-}
-/* 썸네일은 안쪽 원만 차지하고, 남은 8px 띠를 링이 돈다 */
-.card:not(.open) .art,
-.card:not(.open) .veil {
-  inset: 8px;
-  border-radius: 50%;
-}
-/* 썸네일도 같은 곡선으로 따라 움직인다 */
-.art,
-.veil {
-  transition:
-    top var(--swap) var(--ease-swap),
-    right var(--swap) var(--ease-swap),
-    bottom var(--swap) var(--ease-swap),
-    left var(--swap) var(--ease-swap),
-    border-radius var(--r-dur) var(--r-ease) var(--r-delay),
-    opacity 200ms ease;
 }
 .card:not(.open) .art {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
@@ -139,20 +123,50 @@ body {
 }
 /* 썸네일이 없으면 빈 원이 된다 — 그 자체로 "아직 아무것도 없다"는 말이다 */
 .card:not(.open) .art:not(.has) {
-  background: var(--music-dim);
+  background-color: var(--music-dim);
   opacity: 1;
 }
 
 
 /* 썸네일은 정보가 아니라 분위기다. 16:9 영상 커버라 곡과 무관하다 (D-09) */
+/* 썸네일은 언제나 같은 정사각 원이고, 펼칠 때 그대로 확대될 뿐이다.
+   inset으로 늘리면 248x163과 52x52 사이에서 가로세로 비율이 통째로 바뀌어
+   그림이 찌그러졌다 펴진다 — 그게 전환을 어색하게 만들던 것이다. */
 .art {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
   background-position: center;
   background-size: cover;
-  filter: blur(6px);
-  transform: scale(1.2);
+  background-color: rgba(18, 21, 27, 0.96);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  transform: scale(1);
   opacity: 0;
+  transition:
+    transform var(--swap) var(--ease-swap),
+    /* 접힐 때는 블러를 늦게 푼다 — 크게 확대된 그림이 도중에 선명해지면
+       원본(150x83)이 뭉개진 것이 그대로 드러난다 */
+    filter calc(var(--swap) * 0.5) ease calc(var(--swap) * 0.5),
+    box-shadow var(--swap) var(--ease-swap),
+    opacity 200ms ease;
+}
+
+/* 펼치면 카드 대각선(297px)을 덮을 만큼 키운다 — 52 x 5.9 = 307.
+   그만큼 확대된 그림은 뭉개지지만 어차피 블러가 걸린 배경이다 (D-09) */
+.card.open .art {
+  transform: scale(5.9);
+  filter: blur(6px);
+  box-shadow: none;
+  /* 펼칠 때는 반대로 먼저 흐려진다 */
+  transition:
+    transform var(--swap) var(--ease-swap),
+    filter calc(var(--swap) * 0.45) ease,
+    box-shadow var(--swap) var(--ease-swap),
+    opacity 200ms ease;
 }
 .art.has {
   opacity: 1;
@@ -161,9 +175,11 @@ body {
 /* 접힌 원의 진행 링 */
 .ring {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  left: 50%;
+  top: 50%;
+  width: 68px;
+  height: 68px;
+  margin: -34px 0 0 -34px;
   /* 12시에서 시작해 시계방향으로 찬다 */
   transform: rotate(-90deg);
   /* 모서리가 둥글어질 때 함께 든다 — 아직 사각인 카드 위에 원형 고리가
@@ -215,13 +231,18 @@ circle.ring-dot {
 .veil {
   position: absolute;
   inset: 0;
-  transition: opacity 140ms ease;
+  opacity: 0;
+  transition: opacity 180ms ease 60ms;
   background: linear-gradient(
     100deg,
     rgba(14, 16, 21, 0.94) 38%,
     rgba(14, 16, 21, 0.62) 72%,
     rgba(14, 16, 21, 0.42)
   );
+}
+/* 글자를 지키는 띠라서 글자가 있을 때만 있으면 된다 */
+.card.open .veil {
+  opacity: 1;
 }
 
 .body {

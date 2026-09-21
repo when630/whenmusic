@@ -203,7 +203,7 @@ export function createCard({ corner = 'br' } = {}) {
         await win.webContents.executeJavaScript(
           "document.getElementById('card').classList.add('open')"
         )
-        await new Promise((r) => setTimeout(r, 220))
+        await new Promise((r) => setTimeout(r, 400))
       }
 
       // 개발용 — 펼친 카드의 실제 높이를 알려 준다 (전환 애니메이션 값 맞추기)
@@ -212,7 +212,10 @@ export function createCard({ corner = 'br' } = {}) {
           "JSON.stringify(document.getElementById('card').getBoundingClientRect())"
         )
         const r = JSON.parse(box)
-        console.log(`[card] 펼친 크기 ${Math.round(r.width)}x${Math.round(r.height)}`)
+        const cls = await win.webContents.executeJavaScript(
+          "document.getElementById('card').className"
+        )
+        console.log(`[card] 펼친 크기 ${Math.round(r.width)}x${Math.round(r.height)} · class="${cls}"`)
       }
 
       const image = await win.webContents.capturePage()
