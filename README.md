@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="assets/icon/whenmusic.png" width="96" alt="WHENMUSIC">
   <h1>WHENMUSIC</h1>
   <p><b>재생 장치를 갖지 않는 음악 앱. 무엇이 흐르는지 읽고, 탭을 찾지 않고 조작하고, 무엇을 들었는지 남긴다.</b></p>
   <p>Windows 11 · 한국어 · Electron</p>
