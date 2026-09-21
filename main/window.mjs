@@ -85,6 +85,16 @@ export function createWindow({ settings }) {
       return true
     },
 
+    /** 무조건 보여 준다 — 두 번째 실행은 "숨겨라"가 아니라 "보여 달라"다. */
+    show() {
+      if (!win || win.isDestroyed()) {
+        build()
+        return
+      }
+      win.show()
+      win.focus()
+    },
+
     get visible() {
       return !!win && !win.isDestroyed() && win.isVisible()
     },

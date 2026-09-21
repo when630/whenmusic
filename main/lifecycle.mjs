@@ -18,6 +18,7 @@ export function createLifecycle({
   dataDir,
   updateLine = () => '',
   onCheckUpdate = null,
+  shortcutFailures = () => [],
 }) {
   let tray = null
 
@@ -27,6 +28,14 @@ export function createLifecycle({
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: '이력 창 열기', accelerator: 'Ctrl+Alt+P', click: onToggleWindow },
+        ...(shortcutFailures().length
+          ? [
+              {
+                label: `단축키 충돌: ${shortcutFailures().join(' · ')}`,
+                enabled: false,
+              },
+            ]
+          : []),
         { type: 'separator' },
         {
           label: '카드 자리',

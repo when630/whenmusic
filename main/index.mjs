@@ -55,11 +55,13 @@ const historyWindow = createWindow({ settings })
 
 const updateState = createUpdateState()
 let updater = null
+let shortcutFailures = []
 
 const lifecycle = createLifecycle({
   settings,
   dataDir: DATA_DIR,
   updateLine: () => updateLine(updateState, { current: app.getVersion() }),
+  shortcutFailures: () => shortcutFailures,
   onCheckUpdate: () => updater?.check(),
   onToggleWindow: () => historyWindow.toggle(),
   onExport: () => exportData(),
@@ -407,11 +409,27 @@ function applySetting(key, value) {
   paint()
 }
 
+/**
+ * 전역 단축키 (PLAT-05).
+ *
+ * register는 **실패해도 예외를 던지지 않고 false를 돌려준다.** 다른 앱이
+ * 이미 그 조합을 쥐고 있으면 조용히 등록되지 않고, 사용자는 "눌러도 아무
+ * 일이 없다"만 겪는다. 실패를 남겨 두고 트레이에 띄운다.
+ */
 function wireShortcuts() {
-  // 형제 앱과 겹치지 않는다 (PLAT-05)
-  globalShortcut.register('Control+Alt+Left', () => rewind())
-  globalShortcut.register('Control+Alt+S', stamp)
-  globalShortcut.register('Control+Alt+P', () => historyWindow.toggle())
+  const keys = [
+    ['Control+Alt+Left', () => rewind(), '되감기'],
+    ['Control+Alt+S', stamp, '도장'],
+    ['Control+Alt+P', () => historyWindow.toggle(), '이력 창'],
+  ]
+
+  shortcutFailures = keys
+    .filter(([accel, fn]) => !globalShortcut.register(accel, fn))
+    .map(([accel, , label]) => `${label} ${accel.replace('Control', 'Ctrl')}`)
+
+  if (shortcutFailures.length) {
+    console.warn('[shortcut] 다른 앱이 쥐고 있어 등록하지 못했습니다:', shortcutFailures.join(' · '))
+  }
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -552,6 +570,10 @@ app.whenReady().then(async () => {
     }, 1200)
   }
 })
+
+// 이미 돌고 있는데 또 실행하면 창을 띄운다. 트레이를 못 찾았거나 단축키가
+// 다른 앱에 막혔을 때 남는 유일한 길이기도 하다.
+app.on('second-instance', () => historyWindow.show())
 
 app.on('window-all-closed', () => {
   // 카드를 닫아도 앱은 살아 있어야 한다 (HIST-09). 종료는 트레이에서 한다.
