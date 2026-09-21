@@ -424,6 +424,49 @@ export function createStore(file) {
       ).all(limit)
     },
 
+    /**
+     * 스쳐 지나간 줄을 지운다 (D-22).
+     *
+     * 사용자가 지운 것이 아니므로 소프트 삭제(STOR-04)가 아니라 아예 없앤다 —
+     * 되살릴 이유가 없는 줄이고, 휴지통에 쌓이면 그것도 쓰레기다.
+     * 도장이 찍혀 있으면 건드리지 않는다. 2초를 들었어도 표시해 뒀다면
+     * 그건 의미가 있다.
+     */
+    dropTrivialPlay(id, minSec) {
+      if (!state.ok || id == null) return false
+
+      const row = q('SELECT listened_sec FROM plays WHERE id = ?').get(id)
+      if (!row || row.listened_sec >= minSec) return false
+
+      const stamped = q(
+        'SELECT COUNT(*) AS n FROM stamps WHERE play_id = ? AND deleted_at IS NULL'
+      ).get(id)?.n
+      if (stamped) return false
+
+      q('DELETE FROM plays WHERE id = ?').run(id)
+      return true
+    },
+
+    /**
+     * 부팅할 때 한 번 — 이미 끝난 짧은 줄을 치운다 (D-22).
+     *
+     * 줄이 닫히는 순간에 걸러지지만, 앱이 그 사이에 꺼졌으면 남는다.
+     * `before`보다 오래된 것만 본다 — 방금 시작해서 아직 짧은 줄을
+     * 지워 버리면 지금 듣는 것이 사라진다.
+     */
+    purgeTrivialPlays(before, minSec) {
+      if (!state.ok) return 0
+
+      const info = q(
+        `DELETE FROM plays
+          WHERE listened_sec < ?
+            AND COALESCE(ended_at, started_at) < ?
+            AND id NOT IN (SELECT play_id FROM stamps WHERE deleted_at IS NULL)`
+      ).run(minSec, before)
+
+      return Number(info.changes)
+    },
+
     // --- 삭제 (STOR-04) — 형제 앱의 소프트 삭제 규칙을 승계한다 ---
 
     softDeletePlay(id, at) {

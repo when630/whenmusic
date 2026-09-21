@@ -21,6 +21,16 @@ export const PLAYBACK = {
 export const SPLIT_GAP_MS = 30 * 60 * 1000
 
 /**
+ * 이보다 짧게 관측한 줄은 이력에 남기지 않는다 (D-22).
+ *
+ * 2026-09-21 실측 — 믹스를 듣는 중에 다른 미디어(`Tokyo Lyric - Topic`,
+ * 길이 599초)가 **2초 동안 세션을 가로챘다가** 돌아갔다. 제목·채널·길이가
+ * 통째로 바뀌므로 HIST-04 규칙상 새 줄이 되고, 이런 줄이 계속 쌓이면
+ * "무엇을 들었나"를 이력이 더는 답하지 못한다.
+ */
+export const MIN_PLAY_SEC = 20
+
+/**
  * 보간 기준점을 만든다.
  *
  * SMTC의 timeline.position은 재생 중에 갱신되지 않는다 — 실측에서 8분까지
@@ -141,6 +151,9 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
 
     const now = clock()
     const s = sessions.get(currentId)
+
+    // 넘어가기 전에, 직전 줄이 스쳐 지나간 것이면 지운다 (D-22)
+    if (playId != null) store.dropTrivialPlay(playId, MIN_PLAY_SEC)
 
     const open = store.findOpenPlay({ ...key, notBefore: now - SPLIT_GAP_MS })
     if (open) {

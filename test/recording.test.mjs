@@ -96,14 +96,17 @@ test('같은 믹스를 이어 들으면 한 줄로 합친다 (HIST-04)', () => {
 })
 
 test('제목이 바뀌면 새 줄이다 (HIST-04)', () => {
-  const { tr, store } = rig()
+  const { tr, store, advance } = rig()
   play(tr)
+  tr.tick()
+  advance(120_000) // 충분히 들어야 앞 줄이 남는다 (D-22)
   tr.tick()
 
   tr.onEvent({
     name: 'media-changed',
     payload: { appId: 'Chrome', mediaProps: { title: '다른 믹스', artist: 'CherryMix' } },
   })
+  advance(120_000)
   tr.tick()
 
   assert.equal(store.recentPlays().length, 2)
@@ -155,4 +158,54 @@ test('저장소가 죽어 있어도 카드는 답한다 (PLAT-03)', () => {
   assert.doesNotThrow(() => tr.tick())
   assert.equal(tr.stamp(), null)
   assert.equal(tr.snapshot().state, 'playing')
+})
+
+test('스쳐 지나간 줄은 이력에 남지 않는다 (D-22)', () => {
+  const { tr, store, advance } = rig()
+
+  // 믹스를 듣는 중에
+  play(tr)
+  tr.tick()
+  advance(120_000)
+  tr.tick()
+
+  // 다른 미디어가 2초 동안 세션을 가로챘다가
+  tr.onEvent({
+    name: 'media-changed',
+    payload: { appId: 'Chrome', mediaProps: { title: 'Miss your voice', artist: 'Tokyo Lyric - Topic' } },
+  })
+  tr.tick()
+  advance(2_000)
+  tr.tick()
+
+  // 원래 믹스로 돌아온다
+  tr.onEvent({
+    name: 'media-changed',
+    payload: { appId: 'Chrome', mediaProps: { title: '[𝐏𝐥𝐚𝐲𝐥𝐢𝐬𝐭] 믹스', artist: 'CherryMix' } },
+  })
+  tr.tick()
+
+  const rows = store.recentPlays()
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].title, '[Playlist] 믹스')
+  store.close()
+})
+
+test('도장을 찍었으면 짧아도 남긴다', () => {
+  const { tr, store, advance } = rig()
+
+  play(tr, { media: { title: '짧게 스친 곡', artist: 'Someone' } })
+  tr.tick()
+  tr.stamp() // 2초를 들었어도 표시해 뒀다면 의미가 있다
+  advance(2_000)
+  tr.tick()
+
+  tr.onEvent({
+    name: 'media-changed',
+    payload: { appId: 'Chrome', mediaProps: { title: '다음 것', artist: 'Someone' } },
+  })
+  tr.tick()
+
+  assert.equal(store.recentPlays().some((r) => r.title === '짧게 스친 곡'), true)
+  store.close()
 })

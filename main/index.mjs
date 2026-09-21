@@ -7,7 +7,7 @@ import { createCard } from './card.mjs'
 import { applyImport, buildExport } from './data.mjs'
 import { createControl } from './control.mjs'
 import { ACTION, CH } from './ipc.mjs'
-import { PLAYBACK, createTracker } from './session.mjs'
+import { MIN_PLAY_SEC, PLAYBACK, createTracker } from './session.mjs'
 import { createLifecycle } from './lifecycle.mjs'
 import { smtcSupport } from './platform/index.mjs'
 import { createSettings } from './settings.mjs'
@@ -480,6 +480,11 @@ app.whenReady().then(async () => {
 
   // 지운 지 30일이 지난 것만 실제로 지운다 (STOR-04)
   store.purgeDeleted(Date.now() - 30 * 24 * 60 * 60 * 1000)
+
+  // 세션을 스쳐 지나간 줄 치우기 — 줄이 닫힐 때 걸러지지만 그 사이에
+  // 앱이 꺼졌으면 남는다 (D-22). 5분보다 오래된 것만 본다.
+  const swept = store.purgeTrivialPlays(Date.now() - 5 * 60 * 1000, MIN_PLAY_SEC)
+  if (swept) console.log(`[store] 스쳐 지나간 줄 ${swept}개 정리`)
 
   if (selftestMode) {
     selftest()
