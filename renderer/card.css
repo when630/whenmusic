@@ -38,9 +38,10 @@ body {
 .card {
   position: relative;
   /* 링(지름 84)보다 크다 — 진행 점의 번짐이 잘리지 않을 만큼 여유를 둔다.
+     점 궤도 42 + 점 3.8 + 번짐 12 = 58까지 나가므로 반지름 60은 있어야 한다.
      남는 자리는 배경이 투명해 보이지 않고, 호버 타깃만 넉넉해진다 */
-  width: 104px;
-  height: 104px;
+  width: 120px;
+  height: 120px;
   margin-left: auto;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -184,6 +185,9 @@ body {
   margin: -42px 0 0 -42px;
   /* 12시에서 시작해 시계방향으로 찬다 */
   transform: rotate(-90deg);
+  /* SVG는 제 뷰포트 밖을 잘라 낸다. 그대로 두면 진행 점의 번짐이
+     **네모나게** 끊긴다 — 둥근 카드 안에서 그 자국이 제일 눈에 띈다 */
+  overflow: visible;
   /* 모서리가 둥글어질 때 함께 든다 — 아직 사각인 카드 위에 원형 고리가
      떠 있으면 그것대로 어색하다 */
   transition: opacity 150ms ease var(--r-delay);
