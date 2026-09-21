@@ -25,6 +25,7 @@ body {
 
 /* --- 머리 --- */
 
+/* 프레임이 없으니 헤더가 제목 표시줄 노릇을 한다 — 여기를 잡고 창을 옮긴다 */
 header {
   display: flex;
   align-items: center;
@@ -32,6 +33,29 @@ header {
   padding: 9px var(--sp-4);
   border-bottom: 1px solid var(--border);
   flex: none;
+  -webkit-app-region: drag;
+}
+/* 누를 것들은 드래그에서 빼 둔다 — 안 그러면 클릭이 창 이동으로 먹힌다 */
+.tabs,
+.win-close {
+  -webkit-app-region: no-drag;
+}
+
+.win-close {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: var(--sp-2);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  cursor: default;
+  flex: none;
+}
+.win-close:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 .brand {
@@ -84,6 +108,7 @@ header {
 
 .week {
   margin-left: auto;
+  -webkit-app-region: drag;
   color: var(--text-muted);
   font-size: var(--fs-xs);
   flex: none;

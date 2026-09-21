@@ -11,6 +11,7 @@ const el = {
   list: document.getElementById('list'),
   hint: document.getElementById('hint'),
   help: document.getElementById('help'),
+  winClose: document.getElementById('winClose'),
 }
 
 const TABS = ['plays', 'stamps', 'settings']
@@ -416,6 +417,9 @@ async function undo() {
 }
 
 // --- 입력 -----------------------------------------------------------------
+
+// 닫아도 앱은 트레이에 남고 카드는 계속 돈다 (HIST-09)
+el.winClose.addEventListener('click', () => window.close())
 
 el.tabs.addEventListener('click', (e) => {
   const btn = e.target.closest('button')

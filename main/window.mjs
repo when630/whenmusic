@@ -45,9 +45,16 @@ export function createWindow({ settings }) {
       height: saved?.height ?? SIZE.height,
       minWidth: MIN.width,
       minHeight: MIN.height,
+      // 형제 앱과 같이 OS 프레임을 걷는다. 제목 표시줄이 할 일이 없다 —
+      // 창을 옮기는 것은 헤더가, 닫는 것은 헤더의 × 와 Esc가 맡는다.
+      //
+      // resizable을 끄면 Windows가 WS_THICKFRAME을 빼면서 둥근 모서리와
+      // 그림자까지 함께 가져간다(WHENWORK가 확인한 것). 크기는 min으로만 묶는다.
+      frame: false,
+      roundedCorners: true,
+      skipTaskbar: true, // 트레이에 사는 앱이다
       show: false,
       backgroundColor: '#16171c',
-      autoHideMenuBar: true,
       webPreferences: { preload: path.join(HERE, 'preload.cjs') },
     })
 
