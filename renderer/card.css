@@ -200,7 +200,7 @@ body {
 .ring-fill {
   stroke: var(--music);
   stroke-linecap: round;
-  transition: stroke-dashoffset 240ms linear;
+  transition: stroke-dashoffset 240ms linear, stroke-width 160ms ease;
 }
 /* 지금 어디까지 왔는지 한 점으로 — 링만으로는 시작과 끝이 헷갈린다.
    코어는 희게, 둘레는 보라로 번지게 한다. 작은 점이 밝은 썸네일 위에서도
@@ -485,6 +485,13 @@ circle.ring-dot {
 /* 되감은 직후·도장 직후 1.4초 (STMP-02 · CTL-03) */
 .card.flash {
   box-shadow: 0 7px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--music);
+}
+/* 접힌 원에서도 — 펼쳐지는 동안 원이 먼저 반응한다 */
+.card.flash .art {
+  box-shadow: 0 0 0 2px var(--music), 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+.card.flash .ring-fill {
+  stroke-width: 6;
 }
 .card.flash .a {
   color: var(--music);

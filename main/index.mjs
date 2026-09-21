@@ -527,6 +527,18 @@ app.whenReady().then(async () => {
   const swept = store.purgeTrivialPlays(Date.now() - 5 * 60 * 1000, MIN_PLAY_SEC)
   if (swept) console.log(`[store] 스쳐 지나간 줄 ${swept}개 정리`)
 
+  // --shortcut-check — 전역 단축키가 실제로 잡히는지만 보고 나간다.
+  // register는 false를 돌려줄 뿐이고, GUI 앱의 stdout은 백그라운드로 돌리면
+  // 파이프에 갇혀 보이지 않는다. 그래서 따로 확인할 길이 필요했다.
+  if (process.argv.includes('--shortcut-check')) {
+    wireShortcuts()
+    for (const key of ['Control+Alt+Left', 'Control+Alt+Right', 'Control+Alt+S', 'Control+Alt+P']) {
+      console.log(`[key] ${key.padEnd(20)} ${globalShortcut.isRegistered(key) ? '등록됨' : '실패'}`)
+    }
+    app.exit(0)
+    return
+  }
+
   if (selftestMode) {
     selftest()
     return

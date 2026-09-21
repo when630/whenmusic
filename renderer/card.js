@@ -159,15 +159,30 @@ function applyCaps(caps) {
   }
 }
 
-// 되감기·도장 직후 1.4초만 다르게 보이고 돌아온다 (STMP-02 · CTL-03)
+// 되감기·도장 직후 1.4초만 다르게 보이고 돌아온다 (STMP-02 · CTL-03).
+//
+// 접혀 있을 때는 **잠깐 펼쳐서** 무슨 일이 일어났는지 보여 준다. 원만 보이는
+// 상태에서 아무 변화가 없으면 단축키가 먹었는지 알 길이 없다 — 실제로
+// "단축키가 안 된다"는 말이 여기서 나왔다.
+let peeked = false
+
 function flash(message) {
   el.card.classList.add('flash')
   if (message) el.sub.textContent = message
+
+  if (!inside && !el.card.classList.contains('open')) {
+    el.card.classList.add('open')
+    peeked = true
+  }
 
   clearTimeout(flashTimer)
   flashTimer = setTimeout(() => {
     el.card.classList.remove('flash')
     if (snap) el.sub.textContent = snap.sub ?? ''
+
+    // 마우스가 그새 들어왔으면 펼친 채로 둔다
+    if (peeked && !inside) el.card.classList.remove('open')
+    peeked = false
   }, 1400)
 }
 
