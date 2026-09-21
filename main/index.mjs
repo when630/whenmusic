@@ -533,7 +533,13 @@ app.whenReady().then(async () => {
           const tabAt = process.argv.indexOf('--tab')
           await historyWindow.capture(shotFile, { tab: tabAt >= 0 ? process.argv[tabAt + 1] : null })
         }
-        else await card.capture(shotFile, { open: process.argv.includes('--open') })
+        else {
+          const zoomAt = process.argv.indexOf('--zoom')
+          await card.capture(shotFile, {
+            open: process.argv.includes('--open'),
+            zoom: zoomAt >= 0 ? Number(process.argv[zoomAt + 1]) : 0,
+          })
+        }
         app.exit(0)
       }, 600)
     }, 1200)

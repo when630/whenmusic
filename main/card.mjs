@@ -158,8 +158,19 @@ export function createCard({ corner = 'br' } = {}) {
      * 이 창은 클릭도 포커스도 받지 않아서 평범한 화면 캡처 도구로 확인하기
      * 번거롭다. 렌더러가 실제로 무엇을 그렸는지 보는 가장 짧은 길이다.
      */
-    async capture(file, { open = false } = {}) {
+    async capture(file, { open = false, zoom = 0 } = {}) {
       if (!win || win.isDestroyed()) return false
+
+      // 개발용 — 접힌 원은 68px이라 화면 캡처로는 세부가 안 보인다.
+      // 확대해서 찍고 좌상단으로 붙여 잘리지 않게 한다.
+      if (zoom > 1) {
+        await win.webContents.executeJavaScript(
+          `document.body.style.alignItems='flex-start';` +
+            `document.getElementById('card').style.marginLeft='0';` +
+            `document.body.style.zoom=${zoom}`
+        )
+        await new Promise((r) => setTimeout(r, 150))
+      }
 
       // 호버 확장은 마우스가 있어야 열린다. 캡처할 때는 강제로 펼친다.
       if (open) {

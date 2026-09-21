@@ -27,8 +27,8 @@ body {
    조작할 일이 있을 때만 마우스가 오고, 그때 카드로 펼쳐진다. */
 .card {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 68px;
+  height: 68px;
   margin-left: auto;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -52,14 +52,23 @@ body {
   padding: 11px 12px 10px;
 }
 
-/* 접혀 있을 때는 원 밖으로 빛이 새어 나가야 한다 — 카드가 잘라 내면
-   진행 점의 번짐이 가장자리에서 싹둑 끊긴다. 썸네일만 원으로 잘라 둔다. */
+/* 접혀 있을 때는 썸네일 원과 그 바깥을 도는 고리, 둘뿐이다.
+   카드의 배경과 그림자는 썸네일 쪽으로 넘긴다 — 링이 그려질 자리를
+   어두운 판이 차지하고 있으면 고리로 보이지 않는다. */
 .card:not(.open) {
   overflow: visible;
+  background: transparent;
+  box-shadow: none;
 }
+/* 썸네일은 안쪽 원만 차지하고, 남은 8px 띠를 링이 돈다 */
 .card:not(.open) .art,
 .card:not(.open) .veil {
+  inset: 8px;
   border-radius: 50%;
+}
+.card:not(.open) .art {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  background-color: rgba(18, 21, 27, 0.96);
 }
 
 /* 접혀 있을 때 — 글자가 없으니 썸네일을 가릴 이유도 없다 (D-09의 반대쪽) */
@@ -90,6 +99,7 @@ body {
   opacity: 1;
 }
 
+
 /* 썸네일은 정보가 아니라 분위기다. 16:9 영상 커버라 곡과 무관하다 (D-09) */
 .art {
   position: absolute;
@@ -118,11 +128,11 @@ body {
 }
 .ring circle {
   fill: none;
-  stroke-width: 3;
+  stroke-width: 3.5;
 }
 /* 이미지 위에 놓이므로 바탕은 흰빛이 아니라 검정이어야 보인다 (D-09와 같은 이유) */
 .ring-bg {
-  stroke: rgba(0, 0, 0, 0.45);
+  stroke: rgba(0, 0, 0, 0.5);
 }
 .ring-fill {
   stroke: var(--music);
@@ -132,11 +142,13 @@ body {
 /* 지금 어디까지 왔는지 한 점으로 — 링만으로는 시작과 끝이 헷갈린다.
    코어는 희게, 둘레는 보라로 번지게 한다. 작은 점이 밝은 썸네일 위에서도
    살아남으려면 색만으로는 부족하고 빛이 필요하다. */
-.ring-dot {
+/* `.ring circle`보다 구체성이 높아야 한다 — 그 규칙의 fill:none이
+   이기면 점이 투명해진다 */
+circle.ring-dot {
   fill: #fff;
   stroke: none;
-  filter: drop-shadow(0 0 2px var(--music)) drop-shadow(0 0 5px var(--music))
-    drop-shadow(0 0 9px rgba(187, 154, 247, 0.65));
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 6px var(--music))
+    drop-shadow(0 0 12px var(--music));
   transition: cx 240ms linear, cy 240ms linear;
 }
 /* 펼치면 아래 진행바가 같은 일을 한다 — 둘이 같이 있을 이유가 없다 */
@@ -147,7 +159,7 @@ body {
 }
 /* 기준점이 낡았으면 링도 단정하지 않는다 (§5) */
 .card[data-state='stale'] .ring-fill,
-.card[data-state='stale'] .ring-dot {
+.card[data-state='stale'] circle.ring-dot {
   opacity: 0.45;
 }
 

@@ -22,8 +22,9 @@ const el = {
   ringDot: document.getElementById('ringDot'),
 }
 
-// 링 반지름·둘레 — CSS의 r과 맞아야 한다
-const RING_R = 25.5
+// 링의 중심·반지름·둘레 — card.html의 viewBox와 맞아야 한다
+const RING_C = 34
+const RING_R = 31
 const RING_LENGTH = 2 * Math.PI * RING_R
 
 const ICON = {
@@ -78,8 +79,8 @@ function render(next) {
     // 링이 어디까지 찼는지 점으로 찍는다. svg 전체가 -90도 돌아 있어서
     // 여기서는 3시 방향이 0이고, 화면에서는 12시가 된다.
     const angle = 2 * Math.PI * ratio
-    el.ringDot.setAttribute('cx', String(28 + RING_R * Math.cos(angle)))
-    el.ringDot.setAttribute('cy', String(28 + RING_R * Math.sin(angle)))
+    el.ringDot.setAttribute('cx', String(RING_C + RING_R * Math.cos(angle)))
+    el.ringDot.setAttribute('cy', String(RING_C + RING_R * Math.sin(angle)))
 
     drawStamps(stamps ?? [], durSec)
   }
