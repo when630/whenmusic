@@ -38,6 +38,9 @@ const demoName = demoAt >= 0 ? (process.argv[demoAt + 1] ?? 'playing') : null
 // --selftest — 실제 세션에 제어를 한 번씩 보내 보고 결과를 출력한 뒤 나간다.
 // 듣고 있는 음악을 건드리므로 개발 중 확인용이고, 끝나면 원래 상태로 되돌린다.
 const selftestMode = process.argv.includes('--selftest')
+// --watch-events — Worker가 SMTC 이벤트를 실제로 받는지 12초 동안 지켜본다.
+// 카드도 창도 띄우지 않는다.
+const watchEvents = process.argv.includes('--watch-events')
 
 // %APPDATA%\whenmusic\store.sqlite — 형제 앱과 폴더가 다르다 (PLAT-05)
 // 데모는 임시 폴더를 쓴다 — 눈으로 확인하자고 진짜 기록을 더럽힐 이유가 없다
@@ -196,6 +199,9 @@ async function refreshCaps(appId) {
 function wireControl() {
   control = createControl({
     onReady(sessions) {
+      if (watchEvents) {
+        console.log(`[ready] 세션 ${sessions.length}개 — 이제 미디어 키를 눌러 보세요`)
+      }
       tracker.seed(sessions)
       for (const s of sessions) cacheArt(s.sourceAppId, s.media?.thumbnail)
       refreshCaps(tracker.currentId)
@@ -203,6 +209,9 @@ function wireControl() {
     },
 
     onEvent(msg) {
+      if (watchEvents) {
+        console.log(`[ev] ${msg.name.padEnd(18)} ${JSON.stringify(msg.payload ?? {}).slice(0, 110)}`)
+      }
       tracker.onEvent(msg)
 
       if (msg.name === 'session-added') cacheArt(msg.payload.appId, msg.payload.media?.media?.thumbnail)
@@ -530,6 +539,14 @@ app.whenReady().then(async () => {
   // --shortcut-check — 전역 단축키가 실제로 잡히는지만 보고 나간다.
   // register는 false를 돌려줄 뿐이고, GUI 앱의 stdout은 백그라운드로 돌리면
   // 파이프에 갇혀 보이지 않는다. 그래서 따로 확인할 길이 필요했다.
+  if (watchEvents) {
+    setTimeout(() => {
+      console.log('[watch] 끝')
+      app.exit(0)
+    }, 12000)
+    return
+  }
+
   if (process.argv.includes('--shortcut-check')) {
     wireShortcuts()
     for (const key of ['Control+Alt+Left', 'Control+Alt+Right', 'Control+Alt+S', 'Control+Alt+P']) {

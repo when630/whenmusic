@@ -32,7 +32,6 @@ try {
 if (addon) {
   try {
     smtc = new addon.SMTCMonitor()
-    smtc.initialize()
 
     // 애드온 콜백은 (error, data) 꼴이다. error가 오면 그 이벤트만 버린다 —
     // 한 번 실패했다고 감시를 통째로 끊을 이유는 없다.
@@ -58,6 +57,13 @@ if (addon) {
       appId: d.sourceAppId,
       timelineProps: d.timelineProps,
     }))
+
+    // **콜백을 다 건 뒤에 initialize한다.** 순서를 뒤집으면 이벤트가 한 건도
+    // 오지 않는다 — 애드온 래퍼(index.js)도 _bindEvents() 다음에
+    // _initialize()를 부른다. 실제로 반대로 두고 한동안 못 알아챘다:
+    // 카드는 1초마다 보간으로 그려지고 있어서 멀쩡해 보였고, 이력은 앱을
+    // 재시작할 때마다 새 줄이 생겨 쌓이는 것처럼 보였다.
+    smtc.initialize()
 
     send({ type: 'ready', sessions: addon.getSessions() })
   } catch (err) {

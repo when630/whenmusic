@@ -81,7 +81,9 @@ npx electron . --demo playing --shot win.png  --window --tab stamps
 제어가 실제로 먹는지 확인할 때는 다음을 씁니다. **듣고 있는 음악을 건드리고**(잠깐 멈췄다 되감고) 끝나면 되돌립니다.
 
 ```powershell
-npx electron . --selftest
+npx electron . --selftest       # 제어를 한 번씩 보내 보고 되돌린다
+npx electron . --watch-events   # Worker가 받는 SMTC 이벤트를 12초 동안 찍는다
+npx electron . --shortcut-check # 전역 단축키가 실제로 잡히는지
 ```
 
 ## 형제 앱
