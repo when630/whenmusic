@@ -44,10 +44,17 @@ body {
   background: rgba(18, 21, 27, 0.96);
   padding: 0;
   overflow: hidden;
+
+  /* 접힐 때 — 각진 채로 줄어들다가 막판에 둥글어진다. 모서리가 크기보다
+     먼저 끝나면 "원이 된 뒤 작아지는" 것처럼 보인다 */
+  --r-dur: calc(var(--swap) * 0.55);
+  --r-delay: calc(var(--swap) * 0.45);
+  --r-ease: cubic-bezier(0.7, 0, 0.9, 1);
+
   transition:
     width var(--swap) var(--ease-swap),
     height var(--swap) var(--ease-swap),
-    border-radius var(--swap) var(--ease-swap),
+    border-radius var(--r-dur) var(--r-ease) var(--r-delay),
     padding var(--swap) var(--ease-swap),
     background-color var(--swap) var(--ease-swap),
     box-shadow var(--swap) var(--ease-swap),
@@ -61,6 +68,11 @@ body {
   height: 163px;
   border-radius: var(--r-md);
   padding: 11px 12px 10px;
+
+  /* 펼칠 때는 반대다 — 원이 먼저 각을 잡고 그 모양으로 커진다 */
+  --r-dur: calc(var(--swap) * 0.5);
+  --r-delay: 0ms;
+  --r-ease: var(--ease-swap);
 }
 
 /* 접혀 있을 때는 썸네일 원과 그 바깥을 도는 고리, 둘뿐이다.
@@ -85,7 +97,7 @@ body {
     right var(--swap) var(--ease-swap),
     bottom var(--swap) var(--ease-swap),
     left var(--swap) var(--ease-swap),
-    border-radius var(--swap) var(--ease-swap),
+    border-radius var(--r-dur) var(--r-ease) var(--r-delay),
     opacity 200ms ease;
 }
 .card:not(.open) .art {
@@ -154,7 +166,9 @@ body {
   height: 100%;
   /* 12시에서 시작해 시계방향으로 찬다 */
   transform: rotate(-90deg);
-  transition: opacity 140ms ease;
+  /* 모서리가 둥글어질 때 함께 든다 — 아직 사각인 카드 위에 원형 고리가
+     떠 있으면 그것대로 어색하다 */
+  transition: opacity 150ms ease var(--r-delay);
   pointer-events: none;
 }
 .ring circle {
@@ -182,7 +196,11 @@ circle.ring-dot {
     drop-shadow(0 0 12px var(--music));
   transition: cx 240ms linear, cy 240ms linear;
 }
-/* 펼치면 아래 진행바가 같은 일을 한다 — 둘이 같이 있을 이유가 없다 */
+/* 펼치면 아래 진행바가 같은 일을 한다 — 둘이 같이 있을 이유가 없다.
+   나갈 때는 지체 없이 빠진다 */
+.card.open .ring {
+  transition: opacity 90ms ease;
+}
 .card.open .ring,
 .card[data-state='empty'] .ring,
 .card[data-state='error'] .ring {

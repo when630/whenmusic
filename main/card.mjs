@@ -158,6 +158,32 @@ export function createCard({ corner = 'br' } = {}) {
      * 이 창은 클릭도 포커스도 받지 않아서 평범한 화면 캡처 도구로 확인하기
      * 번거롭다. 렌더러가 실제로 무엇을 그렸는지 보는 가장 짧은 길이다.
      */
+    /**
+     * 개발용 — 펼침에서 접힘으로 넘어가는 도중 한 프레임을 찍는다.
+     * 전환이 어색한지는 정지 상태로는 알 수 없다.
+     */
+    async captureMidCollapse(file, { at = 120, zoom = 3 } = {}) {
+      if (!win || win.isDestroyed()) return false
+
+      await win.webContents.executeJavaScript(
+        `document.body.style.alignItems='flex-start';` +
+          `document.getElementById('card').style.marginLeft='0';` +
+          `document.body.style.zoom=${zoom};` +
+          `document.getElementById('card').classList.add('open')`
+      )
+      await new Promise((r) => setTimeout(r, 400))
+
+      await win.webContents.executeJavaScript(
+        "document.getElementById('card').classList.remove('open')"
+      )
+      await new Promise((r) => setTimeout(r, at))
+
+      const image = await win.webContents.capturePage()
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(file, image.toPNG())
+      return true
+    },
+
     async capture(file, { open = false, zoom = 0 } = {}) {
       if (!win || win.isDestroyed()) return false
 

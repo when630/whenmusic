@@ -529,6 +529,13 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       paint()
       setTimeout(async () => {
+        const midAt = process.argv.indexOf('--mid')
+        if (midAt >= 0) {
+          await card.captureMidCollapse(shotFile, { at: Number(process.argv[midAt + 1]) })
+          app.exit(0)
+          return
+        }
+
         if (shotWindow) {
           const tabAt = process.argv.indexOf('--tab')
           await historyWindow.capture(shotFile, { tab: tabAt >= 0 ? process.argv[tabAt + 1] : null })
