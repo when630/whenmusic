@@ -2,7 +2,7 @@
 //
 // 이 창은 드물게 열린다 — 평소에는 카드만 보고, 뭘 들었는지 뒤질 때만 연다.
 // 그래서 창을 닫아도 앱은 트레이에 남고 카드는 계속 돈다.
-import { BrowserWindow, screen } from 'electron'
+import { BrowserWindow, app, screen } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -58,6 +58,15 @@ export function createWindow({ settings }) {
       webPreferences: { preload: path.join(HERE, 'preload.cjs') },
     })
 
+    // 렌더러가 조용히 죽으면 창은 멀쩡해 보이고 키만 안 먹는다.
+    // 개발 중에는 그 소리를 들리게 한다.
+    if (!app.isPackaged) {
+      win.webContents.on('console-message', (_e, level, message, line, source) => {
+        if (level >= 2) console.warn(`[renderer] ${source}:${line} ${message}`)
+      })
+      win.webContents.on('render-process-gone', (_e, d) => console.warn('[renderer] 죽음', d.reason))
+    }
+
     win.loadFile(path.join(HERE, '..', 'renderer', 'main.html'))
     win.once('ready-to-show', () => win.show())
 
@@ -102,6 +111,13 @@ export function createWindow({ settings }) {
       win.focus()
     },
 
+    /** 닫아도 앱은 트레이에 남는다 (HIST-09) — 실제로는 감출 뿐이다. */
+    hide() {
+      if (!win || win.isDestroyed() || !win.isVisible()) return
+      remember()
+      win.hide()
+    },
+
     get visible() {
       return !!win && !win.isDestroyed() && win.isVisible()
     },
@@ -119,6 +135,20 @@ export function createWindow({ settings }) {
       } else {
         win.webContents.send(channel, payload)
       }
+    },
+
+    /** 개발용 — 렌더러에서 한 줄 돌려 보고 결과를 받는다. */
+    probe(code) {
+      if (!win || win.isDestroyed()) return Promise.resolve(null)
+      return win.webContents.executeJavaScript(`(() => { ${code} })()`)
+    },
+
+    /** 개발용 — 렌더러에 진짜 키 이벤트를 보낸다. 포커스와 무관하게 닿는다. */
+    pressKey(key) {
+      if (!win || win.isDestroyed()) return
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: key })
+      win.webContents.sendInputEvent({ type: 'char', keyCode: key })
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: key })
     },
 
     async capture(file, { tab = null } = {}) {

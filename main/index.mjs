@@ -439,6 +439,9 @@ function wireWindowIpc() {
   })
 
   ipcMain.handle(CH.OPEN_DATA_DIR, () => shell.openPath(DATA_DIR))
+
+  // 렌더러의 window.close()는 Chromium이 막는 경우가 있다 — 닫기는 메인이 한다
+  ipcMain.on(CH.CLOSE, () => historyWindow.hide())
 }
 
 // 설정은 바꾸는 즉시 적용된다 — 저장하고 다시 시작하라고 말하지 않는다.
@@ -551,6 +554,39 @@ app.whenReady().then(async () => {
   // --shortcut-check — 전역 단축키가 실제로 잡히는지만 보고 나간다.
   // register는 false를 돌려줄 뿐이고, GUI 앱의 stdout은 백그라운드로 돌리면
   // 파이프에 갇혀 보이지 않는다. 그래서 따로 확인할 길이 필요했다.
+  // --esc-test — 이력 창을 열고 Esc를 보내 닫히는지 본다.
+  // 렌더러가 키를 받았는지, closeWindow까지 갔는지 단계별로 찍는다.
+  if (process.argv.includes('--esc-test')) {
+    historyWindow.show()
+    setTimeout(async () => {
+      await historyWindow.probe(`
+        window.__esc = { keydown: false, close: false }
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__esc.keydown = true }, true)
+        const real = window.whenmusic.closeWindow
+        window.whenmusic.closeWindow = () => { window.__esc.close = true; real() }
+        return 'armed'
+      `)
+
+      console.log('[esc] 창 열림:', historyWindow.visible)
+      historyWindow.pressKey('Escape')
+
+      setTimeout(async () => {
+        console.log('[esc] 렌더러가 본 것:', await historyWindow.probe('return JSON.stringify(window.__esc)'))
+        console.log(
+          '[esc] 가드 상태:',
+          await historyWindow.probe(`return JSON.stringify({
+            active: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : null,
+            helpHidden: document.getElementById('help').hidden,
+            searchHidden: document.getElementById('search').hidden,
+          })`)
+        )
+        console.log('[esc] Esc 뒤 열림:', historyWindow.visible)
+        app.exit(0)
+      }, 700)
+    }, 1400)
+    return
+  }
+
   if (watchEvents) {
     setTimeout(() => {
       console.log('[watch] 끝')

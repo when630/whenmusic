@@ -20,6 +20,7 @@ export const CH = {
   REMOVE: 'hist:remove', // 소프트 삭제 (STOR-04)
   RESTORE: 'hist:restore', // U로 되돌리기
   SEARCH: 'hist:search', // main → window. WHENCOMMAND가 넘긴 검색어
+  CLOSE: 'win:close', // window → main. Esc와 × 버튼이 부른다
   SETTINGS: 'settings:get',
   SET_SETTING: 'settings:set',
   OPEN_DATA_DIR: 'data:open', // 설정 화면이 데이터 폴더를 열어 준다 (DATA-03)

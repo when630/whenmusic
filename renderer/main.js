@@ -356,17 +356,7 @@ function renderSettings() {
 
 // --- 불러오기 --------------------------------------------------------------
 
-async function // WHENCOMMAND가 검색어와 함께 불렀다
-api.onSearch((q) => {
-  tab = 'plays'
-  query = q ?? ''
-  cursor = 0
-  el.q.value = query
-  el.search.hidden = false
-  load()
-})
-
-load() {
+async function load() {
   el.hint.textContent = HINT[tab]
   el.cho.hidden = !(query.trim() && terms().length === 0)
 
@@ -428,8 +418,10 @@ async function undo() {
 
 // --- 입력 -----------------------------------------------------------------
 
-// 닫아도 앱은 트레이에 남고 카드는 계속 돈다 (HIST-09)
-el.winClose.addEventListener('click', () => window.close())
+// 닫아도 앱은 트레이에 남고 카드는 계속 돈다 (HIST-09).
+// window.close()에 기대지 않는다 — Chromium이 스크립트로 열지 않은 창의
+// close를 막는 경우가 있다. 닫는 일은 메인에 맡긴다.
+el.winClose.addEventListener('click', () => api.closeWindow())
 
 el.tabs.addEventListener('click', (e) => {
   const btn = e.target.closest('button')
@@ -546,9 +538,19 @@ document.addEventListener('keydown', (e) => {
 
     case 'Escape':
       if (!el.search.hidden) closeSearch()
-      else window.close()
+      else api.closeWindow()
       break
   }
+})
+
+// WHENCOMMAND가 검색어와 함께 불렀다 (when-protocol)
+api.onSearch((q) => {
+  tab = 'plays'
+  query = q ?? ''
+  cursor = 0
+  el.q.value = query
+  el.search.hidden = false
+  load()
 })
 
 load()

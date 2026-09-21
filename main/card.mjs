@@ -3,7 +3,7 @@
 // 창 기법은 WHENCALENDAR main/overlay.mjs에서 승계했다 — 투명·클릭 통과·
 // 포커스 없음, 그리고 z-order를 주기적으로 다시 잡는 것(CARD-02). 다른 점은
 // 자리뿐이다: 상단 중앙은 WHENCALENDAR가 쓰므로 이 앱은 하단으로 간다(D-08).
-import { BrowserWindow, ipcMain, screen } from 'electron'
+import { BrowserWindow, app, ipcMain, screen } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -76,6 +76,14 @@ export function createCard({ corner = 'br', savedPos = null, onMoved = null } = 
     win.setIgnoreMouseEvents(true, { forward: true })
     raise()
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+    // 렌더러가 조용히 죽으면 카드는 마지막 그림 그대로 떠 있고 버튼만 안 먹는다.
+    // 한 번 당해 봤다 — 개발 중에는 그 소리를 들리게 한다.
+    if (!app.isPackaged) {
+      win.webContents.on('console-message', (_e, level, message, line, source) => {
+        if (level >= 2) console.warn(`[card] ${source}:${line} ${message}`)
+      })
+    }
 
     win.loadFile(path.join(HERE, '..', 'renderer', 'card.html'))
     win.webContents.once('did-finish-load', () => {
