@@ -35,6 +35,9 @@ const shotFile = shotAt >= 0 ? process.argv[shotAt + 1] : null
 // --demo <이름> — 실측값으로 만든 가짜 상태를 그린다 (tools/demo-state.mjs)
 const demoAt = process.argv.indexOf('--demo')
 const demoName = demoAt >= 0 ? (process.argv[demoAt + 1] ?? 'playing') : null
+// --selftest — 실제 세션에 제어를 한 번씩 보내 보고 결과를 출력한 뒤 나간다.
+// 듣고 있는 음악을 건드리므로 개발 중 확인용이고, 끝나면 원래 상태로 되돌린다.
+const selftestMode = process.argv.includes('--selftest')
 
 // %APPDATA%\whenmusic\store.sqlite — 형제 앱과 폴더가 다르다 (PLAT-05)
 // 데모는 임시 폴더를 쓴다 — 눈으로 확인하자고 진짜 기록을 더럽힐 이유가 없다
@@ -411,6 +414,65 @@ function wireShortcuts() {
   globalShortcut.register('Control+Alt+P', () => historyWindow.toggle())
 }
 
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * 제어 경로를 실물로 확인한다 — control.mjs → Worker → 애드온 → SMTC까지.
+ *
+ * SMTC는 재생 중 위치를 갱신하지 않으므로(§5) 되감기 목표를 계산하려면 먼저
+ * 정확한 위치가 있어야 한다. 상태를 한 번 바꾸면 그때 갱신되므로 pause/play로
+ * 기준점을 잡고 시작한다.
+ */
+async function selftest() {
+  const log = (...a) => console.log('[selftest]', ...a)
+  await wait(1500) // Worker가 세션을 읽어 올 때까지
+
+  const id = tracker.currentId
+  if (!id) {
+    log('세션이 없습니다 — 음악을 틀고 다시 실행하세요')
+    app.exit(1)
+    return
+  }
+
+  const read = async () => (await control.session(id))?.timeline?.position ?? null
+  const status = async () => (await control.session(id))?.playback?.playbackStatus ?? null
+
+  log('세션:', id)
+  log('capabilities:', JSON.stringify(await control.capabilities(id)))
+
+  const wasPlaying = (await status()) === PLAYBACK.PLAYING
+  log('시작 상태:', wasPlaying ? 'PLAYING' : 'PAUSED', '· SMTC가 주는 위치', await read())
+
+  // 1) 일시정지 — 여기서 SMTC가 위치를 갱신한다
+  const okPause = await control.pause(id)
+  await wait(1200)
+  const anchored = await read()
+  log('pause  → 수락', okPause, '· 상태', await status(), '· 갱신된 위치', anchored)
+
+  // 2) 재생 복귀
+  const okPlay = await control.play(id)
+  await wait(1200)
+  log('play   → 수락', okPlay, '· 상태', await status())
+
+  // 3) 되감기 — 절대 시크만 가능하므로 목표를 직접 계산한다 (CTL-03)
+  const target = Math.max(0, anchored - 10)
+  const okSeek = await control.seek(id, target)
+  await wait(1200)
+  const landed = await read()
+  log('seek   → 수락', okSeek, '· 목표', target.toFixed(2), '· 착지', landed?.toFixed(2),
+      '· 오차', landed == null ? '?' : (landed - target).toFixed(2), '초')
+
+  // 4) 원래 자리로 되돌린다 — 남의 음악을 옮겨 놓고 끝내지 않는다
+  await control.seek(id, anchored)
+  await wait(1000)
+  log('복귀   → 위치', (await read())?.toFixed(2))
+
+  if (!wasPlaying) await control.pause(id)
+
+  log('끝')
+  app.exit(0)
+}
+
 app.whenReady().then(async () => {
   wireControl()
   wireIpc()
@@ -418,6 +480,11 @@ app.whenReady().then(async () => {
 
   // 지운 지 30일이 지난 것만 실제로 지운다 (STOR-04)
   store.purgeDeleted(Date.now() - 30 * 24 * 60 * 60 * 1000)
+
+  if (selftestMode) {
+    selftest()
+    return
+  }
 
   if (smoke) {
     // 창 없는 스모크 — 부트와 애드온 로드만 확인하고 나간다
