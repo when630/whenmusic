@@ -50,7 +50,11 @@ if (store.state.notice) console.warn('[store]', store.state.notice)
 const settings = createSettings(path.join(DATA_DIR, 'settings.json'))
 
 const tracker = createTracker({ backSec: settings.get('backSec') ?? BACK_SEC, store })
-const card = createCard({ corner: settings.get('corner') })
+const card = createCard({
+  corner: settings.get('corner'),
+  savedPos: settings.get('cardPos'),
+  onMoved: (pos) => settings.set('cardPos', pos),
+})
 const historyWindow = createWindow({ settings })
 
 const updateState = createUpdateState()

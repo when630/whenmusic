@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('whenmusic', {
   onNow: (fn) => ipcRenderer.on('now', (_e, payload) => fn(payload)),
   onStamps: (fn) => ipcRenderer.on('stamps', (_e, list) => fn(list)),
+  onUnhover: (fn) => ipcRenderer.on('card:unhover', () => fn()),
 
   ctl: (msg) => ipcRenderer.send('ctl', msg),
   stamp: () => ipcRenderer.send('stamp'),

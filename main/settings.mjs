@@ -11,6 +11,7 @@ export const DEFAULTS = {
   backSec: 10, // 되감기 폭 (CTL-03 · D-10)
   autoStart: false, // 자동 시작 (PLAT-04)
   window: null, // 이력 창이 마지막으로 있던 자리 (HIST-01)
+  cardPos: null, // 카드를 끌어다 놓은 자리. null이면 corner가 정한다 (D-26)
 }
 
 export function createSettings(file) {

@@ -154,3 +154,46 @@ test('세션이 없으면 안내를 준다 (CARD-10)', () => {
   const tr = createTracker({ clock: fakeClock() })
   assert.equal(tr.snapshot().state, 'empty')
 })
+
+test('낙관적으로 바꿔 둔 값이 진짜 이벤트를 삼키지 않는다 (D-14 · D-15)', () => {
+  const clock = fakeClock()
+  const tr = createTracker({ clock })
+  tr.seed([session()]) // 이미 재생 중 — 기준점은 낡았다
+
+  // 카드에서 정지를 눌렀다. 이벤트보다 먼저 화면을 맞춘다 (D-14)
+  tr.assume('Chrome', PLAYBACK.PAUSED)
+  assert.equal(tr.snapshot().state, 'paused')
+
+  clock.advance(300)
+
+  // 잠시 뒤 SMTC가 같은 상태를 실제로 알려 온다. 화면 값과 같다고 버리면
+  // 기준점을 다시 잡을 기회를 놓친다 (§5)
+  tr.onEvent({
+    name: 'playback-changed',
+    payload: { appId: 'Chrome', playbackInfo: { playbackStatus: PLAYBACK.PAUSED, playbackType: 2 } },
+  })
+
+  tr.onEvent({
+    name: 'playback-changed',
+    payload: { appId: 'Chrome', playbackInfo: { playbackStatus: PLAYBACK.PLAYING, playbackType: 2 } },
+  })
+
+  // 이벤트를 받았으므로 낡음이 풀려야 한다
+  assert.equal(tr.snapshot().state, 'playing')
+})
+
+test('그래도 진짜 중복 이벤트는 버린다 (D-15)', () => {
+  const clock = fakeClock()
+  const tr = createTracker({ clock })
+  tr.seed([session()])
+
+  const info = { playbackStatus: PLAYBACK.PAUSED, playbackType: 2 }
+  tr.onEvent({ name: 'playback-changed', payload: { appId: 'Chrome', playbackInfo: info } })
+
+  const at = tr.positionOf('Chrome')
+  clock.advance(5_000)
+  tr.onEvent({ name: 'playback-changed', payload: { appId: 'Chrome', playbackInfo: { ...info } } })
+
+  // 두 번째가 버려졌다면 멈춘 위치가 그대로다
+  assert.equal(tr.positionOf('Chrome'), at)
+})

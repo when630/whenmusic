@@ -111,6 +111,10 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
   const sessions = new Map() // appId -> MediaInfo
   const anchors = new Map() // appId -> anchor
   const caps = new Map() // appId -> PlaybackCapabilities
+  // 중복 이벤트 판정은 **이벤트가 전에 무엇을 말했는지**로 한다.
+  // 화면에 보이는 값과 비교하면 낙관적 UI(D-14)가 미리 바꿔 둔 값과 같아져서
+  // 진짜 이벤트가 중복으로 버려지고, 기준점을 다시 잡을 기회(§5)를 놓친다.
+  const lastEvent = new Map() // appId -> 마지막으로 이벤트가 전한 playback
   let currentId = null
   let addonFailure = null
 
@@ -180,6 +184,7 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
     const id = info.sourceAppId
 
     sessions.set(id, info)
+    lastEvent.set(id, info.playback)
     anchors.set(
       id,
       makeAnchor({
@@ -233,6 +238,7 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
           sessions.delete(id)
           anchors.delete(id)
           caps.delete(id)
+          lastEvent.delete(id)
           if (currentId === id) currentId = sessions.keys().next().value ?? null
           break
 
@@ -249,9 +255,11 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
         case 'playback-changed': {
           const s = sessions.get(id)
           if (!s) break
-          // 같은 상태로 두 번 오는 이벤트는 버린다 (D-15)
-          if (isRedundantPlayback(s.playback, payload.playbackInfo)) break
+          // 같은 상태로 두 번 오는 이벤트는 버린다 (D-15).
+          // 비교 대상은 화면 값이 아니라 직전 이벤트다 — 위 lastEvent 참고.
+          if (isRedundantPlayback(lastEvent.get(id), payload.playbackInfo)) break
 
+          lastEvent.set(id, payload.playbackInfo)
           s.playback = payload.playbackInfo
           // 상태가 바뀌는 순간이 SMTC가 위치를 갱신하는 유일한 때다.
           // 여기서 기준점을 다시 잡아야 낡음이 복구된다 (§5).

@@ -48,6 +48,8 @@ body {
   background: rgba(18, 21, 27, 0.96);
   padding: 0;
   overflow: hidden;
+  /* 카드를 잡고 끌면 창이 따라온다 (D-26). 누를 것들은 아래에서 뺀다 */
+  -webkit-app-region: drag;
 
   /* 접힐 때 — 각진 채로 줄어들다가 막판에 둥글어진다. 모서리가 크기보다
      먼저 끝나면 "원이 된 뒤 작아지는" 것처럼 보인다 */
@@ -361,6 +363,14 @@ circle.ring-dot {
   border-radius: 99px;
   background: var(--accent);
   flex: none;
+}
+
+/* 누르는 것들은 끌기에서 뺀다 — 안 그러면 클릭이 창 이동으로 먹힌다 */
+.ctl,
+.bar,
+.stamp-list,
+.src {
+  -webkit-app-region: no-drag;
 }
 
 .ctl {

@@ -8,6 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { CH } from './ipc.mjs'
+import { visibleOnAnyDisplay } from './place.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
@@ -21,13 +22,25 @@ const MARGIN = 16
 // 레벨을 올려서 풀리는 문제가 아니라 다시 잡아야 한다 (CARD-02).
 const KEEP_TOP_MS = 1000
 
-export function createCard({ corner = 'br' } = {}) {
+export function createCard({ corner = 'br', savedPos = null, onMoved = null } = {}) {
   let win = null
   let keepTopTimer = null
+  let hoverTimer = null
   let hovering = false
   let placement = corner
+  let freePos = savedPos // 사용자가 끌어다 놓은 자리
 
   function placeOn(display) {
+    // 끌어다 놓은 자리가 있으면 그것이 먼저다. 다만 모니터가 바뀌어 화면
+    // 밖으로 나간 자리는 버린다 — 잡을 수 없는 창이 되면 끝이다
+    if (freePos) {
+      const areas = screen.getAllDisplays().map((d) => d.workArea)
+      if (visibleOnAnyDisplay({ ...freePos, width: WIN_W, height: WIN_H }, areas)) {
+        return { x: freePos.x, y: freePos.y }
+      }
+      freePos = null
+    }
+
     const a = display.workArea // 작업표시줄을 피한다 (CARD-01)
     const y = a.y + a.height - WIN_H - MARGIN
     const x =
@@ -47,7 +60,7 @@ export function createCard({ corner = 'br' } = {}) {
       transparent: true,
       backgroundColor: '#00000000',
       resizable: false,
-      movable: false,
+      movable: true, // 끌어서 옮긴다 (D-26)
       minimizable: false,
       maximizable: false,
       skipTaskbar: true,
@@ -64,6 +77,14 @@ export function createCard({ corner = 'br' } = {}) {
     raise()
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
+    // 끌어다 놓으면 그 자리를 기억한다
+    win.on('moved', () => {
+      if (!win || win.isDestroyed()) return
+      const b = win.getBounds()
+      freePos = { x: b.x, y: b.y }
+      onMoved?.(freePos)
+    })
+
     win.loadFile(path.join(HERE, '..', 'renderer', 'card.html'))
     win.webContents.once('did-finish-load', () => {
       win.showInactive() // show()가 아니다 — 포커스를 가져가면 안 된다
@@ -74,6 +95,36 @@ export function createCard({ corner = 'br' } = {}) {
     if (!win || win.isDestroyed()) return
     win.setAlwaysOnTop(true, 'screen-saver')
     win.moveTop()
+  }
+
+  /**
+   * 마우스가 카드 밖으로 나갔는데 펼친 채로 남는 일이 있다.
+   *
+   * 렌더러는 mousemove로 안팎을 가리는데, 커서가 빠르게 빠져나가면 마지막
+   * 이동이 카드 안에서 끝나고 그 뒤로는 이벤트가 오지 않는다. 창 밖의 커서는
+   * 렌더러가 볼 수 없으므로 메인이 대신 본다.
+   */
+  function watchHover() {
+    stopWatchHover()
+    hoverTimer = setInterval(() => {
+      if (!hovering || !win || win.isDestroyed()) return
+
+      const p = screen.getCursorScreenPoint()
+      const b = win.getBounds()
+      const inside =
+        p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height
+
+      if (!inside) {
+        hovering = false
+        win.setIgnoreMouseEvents(true, { forward: true })
+        win.webContents.send(CH.UNHOVER)
+      }
+    }, 250)
+  }
+
+  function stopWatchHover() {
+    if (hoverTimer) clearInterval(hoverTimer)
+    hoverTimer = null
   }
 
   function startKeepTop() {
@@ -109,6 +160,7 @@ export function createCard({ corner = 'br' } = {}) {
       if (win) return
       build()
       startKeepTop()
+      watchHover()
       // 모니터를 붙였다 떼면 주 모니터와 작업 영역이 바뀐다
       screen.on('display-metrics-changed', relocate)
       screen.on('display-added', relocate)
@@ -142,9 +194,11 @@ export function createCard({ corner = 'br' } = {}) {
       }
     },
 
-    /** CARD-13 — 설정에서 좌하단으로 옮긴다. */
+    /** CARD-13 — 설정에서 좌하단으로 옮긴다. 끌어다 놓은 자리는 버린다. */
     setCorner(next) {
       placement = next === 'bl' ? 'bl' : 'br'
+      freePos = null
+      onMoved?.(null)
       relocate()
     },
 
@@ -226,6 +280,7 @@ export function createCard({ corner = 'br' } = {}) {
 
     destroy() {
       stopKeepTop()
+      stopWatchHover()
       screen.removeListener('display-metrics-changed', relocate)
       screen.removeListener('display-added', relocate)
       screen.removeListener('display-removed', relocate)

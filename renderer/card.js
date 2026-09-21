@@ -257,6 +257,13 @@ el.stampList.addEventListener('click', (e) => {
   flash('표시해 둔 지점으로')
 })
 
+// 커서가 카드를 떠났는데 mousemove가 끊겨 펼친 채로 남는 일이 있다.
+// 메인이 커서를 대신 보고 알려 준다.
+api.onUnhover(() => {
+  inside = false
+  el.card.classList.remove('open')
+})
+
 api.onNow(render)
 api.onStamps((list) => {
   if (snap) render({ ...snap, stamps: list })

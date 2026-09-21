@@ -5,6 +5,7 @@ export const CH = {
   // main → card
   NOW: 'now', // 현재 스냅샷 + 보간 위치 + 카드 상태
   STAMPS: 'stamps', // 이번 세션의 도장 목록
+  UNHOVER: 'card:unhover', // 커서가 카드를 떠났다 — 메인이 대신 본 것
 
   // card → main
   CTL: 'ctl', // { action, appId, sec? }
