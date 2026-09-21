@@ -153,7 +153,7 @@ function applyCaps(caps) {
     let ok = true
 
     if (act === 'toggle') ok = can('isPlayEnabled') || can('isPauseEnabled')
-    if (act === 'back') ok = can('isPlaybackPositionEnabled')
+    if (act === 'back' || act === 'forward') ok = can('isPlaybackPositionEnabled')
 
     btn.disabled = !ok
   }
@@ -217,9 +217,10 @@ el.card.addEventListener('click', (e) => {
     return
   }
 
-  if (act === 'back') {
-    api.ctl({ action: 'back', appId: snap.appId, sec: snap.backSec ?? 10 })
-    flash(`← ${snap.backSec ?? 10}초 되감음`)
+  if (act === 'back' || act === 'forward') {
+    const sec = snap.backSec ?? 10
+    api.ctl({ action: act, appId: snap.appId, sec })
+    flash(act === 'back' ? `← ${sec}초 되감음` : `${sec}초 앞으로 →`)
     return
   }
 

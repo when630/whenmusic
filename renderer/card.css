@@ -388,6 +388,10 @@ circle.ring-dot {
   background: var(--music-dim);
   color: var(--music);
 }
+/* 앞으로 감기는 되감기를 뒤집은 것이다 — 아이콘을 따로 둘 이유가 없다 */
+.ctl button[data-act='forward'] svg {
+  transform: scaleX(-1);
+}
 .ctl button.stamp {
   color: var(--music);
 }

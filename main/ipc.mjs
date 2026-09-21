@@ -29,5 +29,6 @@ export const ACTION = {
   PREV: 'prev',
   SEEK: 'seek', // sec = 절대 위치
   BACK: 'back', // sec = 되감을 양 (CTL-03)
+  FORWARD: 'forward', // sec = 앞으로 감을 양. 되감기의 짝이다
   PICK: 'pick', // 제어 대상 세션을 바꾼다 (CARD-11)
 }

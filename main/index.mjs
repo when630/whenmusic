@@ -224,14 +224,24 @@ function wireControl() {
   control.start()
 }
 
-// CTL-03 — 지금 위치에서 10초 뒤로. 절대 시크만 가능하므로 목표를 직접 계산한다.
-async function rewind(sec = settings.get('backSec') ?? BACK_SEC) {
+/**
+ * 지금 위치에서 delta초만큼 옮긴다 (CTL-03).
+ *
+ * SMTC는 상대 이동을 받지 않는다 — 절대 시크뿐이라 목표를 앱이 직접
+ * 계산한다. 그래서 위치가 낡아 있으면(§5) 되감기도 엉뚱한 데로 간다.
+ */
+async function seekBy(delta) {
   const id = tracker.currentId
   if (!id || !control) return
 
-  const target = Math.max(0, tracker.positionOf(id) - sec)
+  const now = tracker.positionOf(id)
+  const duration = tracker.snapshot().durSec || 0
+  let target = Math.max(0, now + delta)
+  // 끝을 넘기면 곡이 넘어가 버린다 — 1초 앞에 세운다
+  if (duration > 0) target = Math.min(target, duration - 1)
+
   tracker.assumeSeek(id, target) // 이벤트보다 먼저 카드를 맞춘다 (D-14)
-  flashOnce = `← ${sec}초 되감음`
+  flashOnce = delta < 0 ? `← ${-delta}초 되감음` : `${delta}초 앞으로 →`
   paint()
 
   try {
@@ -240,6 +250,10 @@ async function rewind(sec = settings.get('backSec') ?? BACK_SEC) {
     // 거부되면 다음 timeline-changed가 제자리로 되돌려 놓는다
   }
 }
+
+const step = () => settings.get('backSec') ?? BACK_SEC
+const rewind = (sec = step()) => seekBy(-sec)
+const forward = (sec = step()) => seekBy(sec)
 
 function wireIpc() {
   ipcMain.on(CH.CTL, async (_e, msg) => {
@@ -277,7 +291,11 @@ function wireIpc() {
           break
 
         case ACTION.BACK:
-          await rewind(msg.sec ?? BACK_SEC)
+          await rewind(msg.sec ?? step())
+          break
+
+        case ACTION.FORWARD:
+          await forward(msg.sec ?? step())
           break
 
         case ACTION.PICK:
@@ -419,6 +437,7 @@ function applySetting(key, value) {
 function wireShortcuts() {
   const keys = [
     ['Control+Alt+Left', () => rewind(), '되감기'],
+    ['Control+Alt+Right', () => forward(), '앞으로'],
     ['Control+Alt+S', stamp, '도장'],
     ['Control+Alt+P', () => historyWindow.toggle(), '이력 창'],
   ]
