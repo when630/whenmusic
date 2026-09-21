@@ -48,6 +48,11 @@ export async function demoState(variant = 'playing') {
     ],
   }
 
+  if (variant === 'half') {
+    // 링의 점이 6시 방향에 오는 자리 — 진행 표시를 눈으로 확인할 때 쓴다
+    const half = durSec / 2
+    return { ...base, posSec: half, nowText: hms(half) }
+  }
   if (variant === 'paused') return { ...base, state: 'paused' }
   if (variant === 'stale') return { ...base, state: 'stale' }
   if (variant === 'radio') {

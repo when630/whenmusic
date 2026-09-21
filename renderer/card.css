@@ -66,14 +66,13 @@ body {
   filter: none;
   transform: none;
 }
-/* 재생 중일 때만 테두리가 산다 — 원 하나로 상태를 말한다 */
-.card:not(.open)[data-state='playing'],
-.card:not(.open)[data-state='stale'] {
-  border-color: var(--music);
-  box-shadow: 0 7px 26px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--music-dim);
+/* 접혀 있을 때는 테두리를 두지 않는다 — 링이 그 자리를 쓴다 */
+.card:not(.open) {
+  border-color: transparent;
 }
+/* 링이 없는 상태에서는 원 자체가 말을 해야 한다 */
 .card:not(.open)[data-state='error'] {
-  border-color: var(--warning);
+  background: rgba(224, 175, 104, 0.22);
 }
 /* 썸네일이 없으면 빈 원이 된다 — 그 자체로 "아직 아무것도 없다"는 말이다 */
 .card:not(.open) .art:not(.has) {
@@ -120,6 +119,13 @@ body {
   stroke-linecap: round;
   transition: stroke-dashoffset 240ms linear;
 }
+/* 지금 어디까지 왔는지 한 점으로 — 링만으로는 시작과 끝이 헷갈린다 */
+.ring-dot {
+  fill: var(--music);
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 1;
+  transition: cx 240ms linear, cy 240ms linear;
+}
 /* 펼치면 아래 진행바가 같은 일을 한다 — 둘이 같이 있을 이유가 없다 */
 .card.open .ring,
 .card[data-state='empty'] .ring,
@@ -127,7 +133,8 @@ body {
   opacity: 0;
 }
 /* 기준점이 낡았으면 링도 단정하지 않는다 (§5) */
-.card[data-state='stale'] .ring-fill {
+.card[data-state='stale'] .ring-fill,
+.card[data-state='stale'] .ring-dot {
   opacity: 0.45;
 }
 

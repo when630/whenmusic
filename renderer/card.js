@@ -19,10 +19,12 @@ const el = {
   stampList: document.getElementById('stampList'),
   ring: document.getElementById('ring'),
   ringFill: document.getElementById('ringFill'),
+  ringDot: document.getElementById('ringDot'),
 }
 
-// 링 둘레 — CSS의 r과 맞아야 한다
-const RING_LENGTH = 2 * Math.PI * 25.5
+// 링 반지름·둘레 — CSS의 r과 맞아야 한다
+const RING_R = 25.5
+const RING_LENGTH = 2 * Math.PI * RING_R
 
 const ICON = {
   play: 'M8 5v14l11-7z',
@@ -72,6 +74,12 @@ function render(next) {
     el.fill.style.width = `${ratio * 100}%`
     el.ringFill.style.strokeDasharray = String(RING_LENGTH)
     el.ringFill.style.strokeDashoffset = String(RING_LENGTH * (1 - ratio))
+
+    // 링이 어디까지 찼는지 점으로 찍는다. svg 전체가 -90도 돌아 있어서
+    // 여기서는 3시 방향이 0이고, 화면에서는 12시가 된다.
+    const angle = 2 * Math.PI * ratio
+    el.ringDot.setAttribute('cx', String(28 + RING_R * Math.cos(angle)))
+    el.ringDot.setAttribute('cy', String(28 + RING_R * Math.sin(angle)))
 
     drawStamps(stamps ?? [], durSec)
   }
