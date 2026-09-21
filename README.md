@@ -68,8 +68,19 @@ npm run build      # dist/에 설치 파일
 개발 중 화면을 눈으로 확인할 때는 실측값으로 만든 가짜 상태를 씁니다.
 
 ```powershell
-npx electron . --demo playing --shot card.png          # 카드
-npx electron . --demo playing --shot win.png --window  # 이력 창
+npx electron . --demo playing --shot card.png            # 접힌 원
+npx electron . --demo playing --shot card.png --open     # 펼친 카드
+npx electron . --demo half   --shot card.png --zoom 3    # 3배로 — 작은 것은 이래야 보인다
+npx electron . --demo playing --shot mid.png  --mid 90   # 접히는 도중 한 프레임
+npx electron . --demo playing --shot win.png  --window --tab stamps
+```
+
+`--demo`는 실측값으로 만든 가짜 상태이고(`tools/demo-state.mjs`), 임시 폴더의 저장소를 씁니다 — 눈으로 확인하자고 진짜 기록을 더럽히지 않습니다.
+
+제어가 실제로 먹는지 확인할 때는 다음을 씁니다. **듣고 있는 음악을 건드리고**(잠깐 멈췄다 되감고) 끝나면 되돌립니다.
+
+```powershell
+npx electron . --selftest
 ```
 
 ## 형제 앱
