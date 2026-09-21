@@ -1,212 +1,294 @@
-// tools/make-icon.mjs — 아이콘을 굽는다.
+// tools/make-icon.mjs — 배포용 아이콘을 굽는다 (REL-01).
 //
-// 형제 앱은 디자인 도구로 만든 원본 PNG(assets/icon/<app>.png)를 줄여 쓴다.
-// 이 앱은 아직 그 원본이 없어서 **코드로 그린다.** 원본이 생기면 WHENWORK
-// tools/make-icon.mjs 방식(원본을 줄이고 글리프만 떼어내기)으로 갈아끼운다.
+// WHENWORK tools/make-icon.mjs를 승계했다(D-17). 원본은
+// assets/icon/whenmusic.png 하나뿐이고, 여기서 둘을 만든다:
 //
-//   build/icon.png   512px — 설치 파일·실행 파일·창이 쓴다
-//   build/tray.png   32px  — 트레이 글리프. 배경 없이 흰 도형만
-//   build/tray@2x.png 64px
+//   build/icon.png    — 설치 파일·실행 파일·창이 쓰는 앱 아이콘. 원본 비율
+//                       그대로 512px로 줄인다(여백도 함께 남긴다 — 설치
+//                       관리자는 자기 여백을 따로 두지 않는다).
 //
-// 외부 의존성을 두지 않으려고 PNG 인코더를 직접 넣었다(zlib만 쓴다).
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import zlib from 'node:zlib'
+//   build/tray*.png   — 트레이 글리프. 원본에서 **흰 도형만 떼어내** 그 도형의
+//                       경계로 잘라 줄인 것이다. 아이콘은 배경 위에 도형이 얹힌
+//                       모양이라, 알파를 그대로 쓰면 둥근 사각형 전체가 글리프가
+//                       되어 16px 트레이에서 파란 덩어리가 된다.
+//                       떼어내는 기준은 밝기가 아니라 가장 어두운 채널이다 —
+//                       배경 그라디언트의 하늘색은 밝기가 높아 밝기로 자르면
+//                       배경까지 글리프가 된다. 자세한 이유는 glyphMask에 적었다.
+//
+// macOS Template은 만들지 않는다. SMTC가 Windows 전용이라 이 앱은 Windows만
+// 간다(PLAT-06 — macOS는 v2에서 MPNowPlayingInfoCenter로 다시 쓴다).
+//
+// 외부 의존성을 두지 않으려고 PNG 디코더·인코더를 직접 넣었다(zlib만 쓴다).
+import zlib from 'node:zlib';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url))
-const OUT = path.join(HERE, '..', 'build')
-
-// --- PNG 쓰기 --------------------------------------------------------------
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
+const OUT_DIR = path.join(ROOT, 'build');
+const SRC = path.join(ROOT, 'assets', 'icon', 'whenmusic.png');
 
 const CRC_TABLE = (() => {
-  const t = new Uint32Array(256)
+  const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
-    let c = n
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
-    t[n] = c >>> 0
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
   }
-  return t
-})()
+  return t;
+})();
 
 function crc32(buf) {
-  let c = 0xffffffff
-  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8)
-  return (c ^ 0xffffffff) >>> 0
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }
 
 function chunk(type, data) {
-  const len = Buffer.alloc(4)
-  len.writeUInt32BE(data.length)
-
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
-  const crc = Buffer.alloc(4)
-  crc.writeUInt32BE(crc32(body))
-
-  return Buffer.concat([len, body, crc])
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([len, body, crc]);
 }
 
-function writePng(file, { width, height, rgba }) {
-  const ihdr = Buffer.alloc(13)
-  ihdr.writeUInt32BE(width, 0)
-  ihdr.writeUInt32BE(height, 4)
-  ihdr[8] = 8 // bit depth
-  ihdr[9] = 6 // RGBA
-
-  // 각 행 앞에 필터 바이트 0을 붙인다 — 필터를 쓰지 않는다
-  const raw = Buffer.alloc((width * 4 + 1) * height)
+function encodePng(width, height, rgba) {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // RGBA
+  const rows = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) {
-    const at = y * (width * 4 + 1)
-    raw[at] = 0
-    rgba.copy(raw, at + 1, y * width * 4, (y + 1) * width * 4)
+    rows[y * (width * 4 + 1)] = 0; // filter: none
+    rgba.copy(rows, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
   }
-
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(
-    file,
-    Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      chunk('IHDR', ihdr),
-      chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
-      chunk('IEND', Buffer.alloc(0)),
-    ])
-  )
+  return Buffer.concat([
+    sig,
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(rows, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
-// --- 그리기 ----------------------------------------------------------------
-
-// 4배로 그린 뒤 줄인다 — 곡선 가장자리를 계단 없이 얻는 가장 짧은 길이다.
-const SS = 4
-
-function canvas(size) {
-  return { size, px: new Float32Array(size * size * 4) }
+// ── PNG 디코더 (8비트 RGBA/RGB, 비인터레이스만 — 원본이 그 형식이다)
+function decodePng(buf) {
+  let o = 8;
+  let ihdr = null;
+  const idat = [];
+  while (o < buf.length) {
+    const len = buf.readUInt32BE(o);
+    const type = buf.toString('ascii', o + 4, o + 8);
+    const data = buf.slice(o + 8, o + 8 + len);
+    if (type === 'IHDR') {
+      ihdr = { w: data.readUInt32BE(0), h: data.readUInt32BE(4), depth: data[8], color: data[9], interlace: data[12] };
+    } else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    o += 12 + len;
+  }
+  if (!ihdr) throw new Error('IHDR 없음');
+  if (ihdr.depth !== 8 || ihdr.interlace !== 0 || (ihdr.color !== 6 && ihdr.color !== 2)) {
+    throw new Error(`지원하지 않는 PNG 형식: depth=${ihdr.depth} color=${ihdr.color} interlace=${ihdr.interlace}`);
+  }
+  const ch = ihdr.color === 6 ? 4 : 3;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const stride = ihdr.w * ch;
+  const out = Buffer.alloc(ihdr.w * ihdr.h * 4);
+  let prev = Buffer.alloc(stride);
+  for (let y = 0; y < ihdr.h; y++) {
+    const filter = raw[y * (stride + 1)];
+    const line = Buffer.from(raw.slice(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    // PNG 필터 되돌리기 — 여기를 틀리면 그림이 사선으로 흐른다
+    for (let i = 0; i < stride; i++) {
+      const a = i >= ch ? line[i - ch] : 0;
+      const b = prev[i];
+      const c = i >= ch ? prev[i - ch] : 0;
+      let add = 0;
+      if (filter === 1) add = a;
+      else if (filter === 2) add = b;
+      else if (filter === 3) add = (a + b) >> 1;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        add = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      line[i] = (line[i] + add) & 0xff;
+    }
+    prev = line;
+    for (let x = 0; x < ihdr.w; x++) {
+      const s = x * ch;
+      const d = (y * ihdr.w + x) * 4;
+      out[d] = line[s];
+      out[d + 1] = line[s + 1];
+      out[d + 2] = line[s + 2];
+      out[d + 3] = ch === 4 ? line[s + 3] : 0xff;
+    }
+  }
+  return { w: ihdr.w, h: ihdr.h, rgba: out };
 }
 
-function put(c, x, y, [r, g, b], a = 1) {
-  if (x < 0 || y < 0 || x >= c.size || y >= c.size) return
-  const i = (y * c.size + x) * 4
-  const inv = 1 - a
-  c.px[i] = c.px[i] * inv + r * a
-  c.px[i + 1] = c.px[i + 1] * inv + g * a
-  c.px[i + 2] = c.px[i + 2] * inv + b * a
-  c.px[i + 3] = c.px[i + 3] * inv + a
+// 보이는 부분의 경계 상자. 정사각으로 맞춘다 — 가로세로 비가 틀어지면 원이 타원이 된다.
+export function bbox(rgba, w, h) {
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (rgba[(y * w + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
+  const side = Math.max(x1 - x0, y1 - y0) + 1;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return {
+    x0: Math.max(0, Math.round(cx - side / 2)),
+    y0: Math.max(0, Math.round(cy - side / 2)),
+    x1: Math.min(w - 1, Math.round(cx + side / 2)),
+    y1: Math.min(h - 1, Math.round(cy + side / 2)),
+  };
 }
 
-/** 둥근 사각형 안쪽인가. 모서리에서는 원의 방정식을 쓴다. */
-function inRoundRect(x, y, { left, top, right, bottom, radius }) {
-  if (x < left || x > right || y < top || y > bottom) return false
-
-  const cx = Math.min(Math.max(x, left + radius), right - radius)
-  const cy = Math.min(Math.max(y, top + radius), bottom - radius)
-  const dx = x - cx
-  const dy = y - cy
-
-  return dx * dx + dy * dy <= radius * radius
-}
-
-function downscale(c, out) {
-  const step = c.size / out
-  const rgba = Buffer.alloc(out * out * 4)
-
-  for (let y = 0; y < out; y++) {
-    for (let x = 0; x < out; x++) {
-      let r = 0
-      let g = 0
-      let b = 0
-      let a = 0
-      let n = 0
-
-      for (let sy = 0; sy < step; sy++) {
-        for (let sx = 0; sx < step; sx++) {
-          const i = ((y * step + sy) * c.size + (x * step + sx)) * 4
-          r += c.px[i]
-          g += c.px[i + 1]
-          b += c.px[i + 2]
-          a += c.px[i + 3]
-          n++
+// 박스 평균 축소. **알파를 곱해 평균한 뒤 되나눈다** — 안 그러면 투명한 가장자리의
+// 색(보통 0,0,0)이 섞여 들어와 테두리가 거뭇해진다. 16px에서는 그 반투명 가장자리가
+// 곧 형태라, 여기를 대충 하면 글리프가 뭉개진다.
+export function resize(src, w, h, size, bb = null) {
+  const box = bb ?? { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
+  const bw = box.x1 - box.x0 + 1;
+  const bh = box.y1 - box.y0 + 1;
+  const out = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const X0 = box.x0 + Math.floor((x * bw) / size);
+      const X1 = box.x0 + Math.max(Math.floor(((x + 1) * bw) / size), Math.floor((x * bw) / size) + 1);
+      const Y0 = box.y0 + Math.floor((y * bh) / size);
+      const Y1 = box.y0 + Math.max(Math.floor(((y + 1) * bh) / size), Math.floor((y * bh) / size) + 1);
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+      let n = 0;
+      for (let yy = Y0; yy < Y1 && yy < h; yy++) {
+        for (let xx = X0; xx < X1 && xx < w; xx++) {
+          const i = (yy * w + xx) * 4;
+          const al = src[i + 3] / 255;
+          r += src[i] * al;
+          g += src[i + 1] * al;
+          b += src[i + 2] * al;
+          a += src[i + 3];
+          n++;
         }
       }
-
-      const at = (y * out + x) * 4
-      rgba[at] = Math.round((r / n) * 255)
-      rgba[at + 1] = Math.round((g / n) * 255)
-      rgba[at + 2] = Math.round((b / n) * 255)
-      rgba[at + 3] = Math.round((a / n) * 255)
+      const d = (y * size + x) * 4;
+      const am = n ? a / n : 0;
+      const aw = am / 255;
+      out[d] = aw > 0 ? Math.min(255, Math.round(r / n / aw)) : 0;
+      out[d + 1] = aw > 0 ? Math.min(255, Math.round(g / n / aw)) : 0;
+      out[d + 2] = aw > 0 ? Math.min(255, Math.round(b / n / aw)) : 0;
+      out[d + 3] = Math.round(am);
     }
   }
-
-  return { width: out, height: out, rgba }
+  return out;
 }
 
-// 형제 앱 아이콘과 같은 문법 — 둥근 사각형 그라디언트 위에 흰 도형.
-// 색은 이 앱이 더한 --music(#bb9af7) 쪽으로 기울인다.
-const FROM = [0.49, 0.35, 0.85] // #7d59d9
-const TO = [0.73, 0.60, 0.97] // #bb9af7
-
-const BARS = [0.42, 0.72, 1.0, 0.62, 0.34] // 이퀄라이저 높이 비율
-
-function drawIcon({ size, background = true }) {
-  const S = size * SS
-  const c = canvas(S)
-
-  const pad = background ? S * 0.09 : 0
-  const rect = {
-    left: pad,
-    top: pad,
-    right: S - pad,
-    bottom: S - pad,
-    radius: S * 0.22,
+// 앱 아이콘에서 **흰 도형만** 떼어낸다.
+//
+// 이 앱의 아이콘은 둥근 사각형 배경 위에 흰 음표·시계가 얹힌 모양이다. 알파를 그대로
+// 쓰면 사각형 전체가 글리프가 되어 16px 트레이에서 파란 덩어리로 뭉개진다(형제 앱에서
+// 실제로 그렇게 나왔다). 트레이가 원하는 것은 배경이 아니라 그 위의 도형이다.
+//
+// 가르는 기준은 밝기가 아니라 **가장 어두운 채널**이다. 배경은 그라디언트라 왼쪽 위
+// 하늘색은 밝기가 0.7을 넘어 밝기로 자르면 배경까지 글리프가 된다(실제로 그랬다 —
+// 글리프 경계가 아이콘 전체 크기로 잡혔다). 흰색만 세 채널이 모두 높다:
+//   흰색 (255,255,255) → 1.00   하늘색 (125,211,252) → 0.49   진파랑 (30,64,175) → 0.12
+// 경계의 반투명 픽셀이 남아야 16px에서 획이 이어지므로 이진화하지 않는다.
+export function glyphMask(rgba, w, h) {
+  const out = Buffer.alloc(w * h * 4);
+  const FLOOR = 0.62;
+  for (let i = 0; i < w * h; i++) {
+    const d = i * 4;
+    const a = rgba[d + 3] / 255;
+    const minCh = Math.min(rgba[d], rgba[d + 1], rgba[d + 2]) / 255;
+    const v = Math.max(0, (minCh - FLOOR) / (1 - FLOOR));
+    out[d] = rgba[d];
+    out[d + 1] = rgba[d + 1];
+    out[d + 2] = rgba[d + 2];
+    out[d + 3] = Math.round(255 * v * a);
   }
-
-  if (background) {
-    for (let y = 0; y < S; y++) {
-      for (let x = 0; x < S; x++) {
-        if (!inRoundRect(x + 0.5, y + 0.5, rect)) continue
-        const t = (x / S) * 0.5 + (y / S) * 0.5
-        put(c, x, y, [
-          FROM[0] + (TO[0] - FROM[0]) * t,
-          FROM[1] + (TO[1] - FROM[1]) * t,
-          FROM[2] + (TO[2] - FROM[2]) * t,
-        ])
-      }
-    }
-  }
-
-  // 이퀄라이저 막대 — "무엇이 흐르고 있다"를 한 글자로 말하는 도형이다.
-  // 음표는 곡을 뜻하는데 이 앱은 곡을 다루지 않는다(D-03).
-  const inner = background ? S * 0.52 : S * 0.86
-  const barW = inner / (BARS.length * 2 - 1)
-  const startX = (S - inner) / 2
-  const midY = S / 2
-  const white = [1, 1, 1]
-
-  BARS.forEach((h, i) => {
-    const x0 = startX + i * barW * 2
-    const half = (inner * h) / 2
-    const r = barW / 2
-
-    for (let y = Math.floor(midY - half); y <= Math.ceil(midY + half); y++) {
-      for (let x = Math.floor(x0); x <= Math.ceil(x0 + barW); x++) {
-        if (
-          inRoundRect(x + 0.5, y + 0.5, {
-            left: x0,
-            top: midY - half,
-            right: x0 + barW,
-            bottom: midY + half,
-            radius: r,
-          })
-        ) {
-          put(c, x, y, white)
-        }
-      }
-    }
-  })
-
-  return c
+  return out;
 }
 
-writePng(path.join(OUT, 'icon.png'), downscale(drawIcon({ size: 512 }), 512))
-writePng(path.join(OUT, 'tray.png'), downscale(drawIcon({ size: 32, background: false }), 32))
-writePng(path.join(OUT, 'tray@2x.png'), downscale(drawIcon({ size: 64, background: false }), 64))
+// 마스크를 한 가지 색으로 칠한다. Windows 트레이는 밝은·어두운 작업 표시줄 양쪽에
+// 서므로 아이콘의 색을 그대로 쓴다 — 흰 글리프는 밝은 작업 표시줄에서 사라진다.
+export function tint(rgba, [r, g, b]) {
+  const out = Buffer.from(rgba);
+  for (let i = 0; i < out.length; i += 4) {
+    out[i] = r;
+    out[i + 1] = g;
+    out[i + 2] = b;
+  }
+  return out;
+}
 
-console.log('build/icon.png · build/tray.png · build/tray@2x.png')
+// 아이콘의 대표 색 — **배경 픽셀의 평균**이다. 가장 진한 한 픽셀을 고르면 그라디언트
+// 끝의 극단값(#000ada 같은)이 잡혀 아이콘과 다른 색이 된다. 글리프(흰 도형)는 마스크로
+// 빼고, 남은 배경만 평균 낸다.
+export function accentColor(rgba, mask, w, h) {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  for (let i = 0; i < w * h; i++) {
+    const d = i * 4;
+    if (rgba[d + 3] < 200) continue; // 투명한 바깥
+    if (mask[d + 3] > 40) continue; // 흰 도형
+    r += rgba[d];
+    g += rgba[d + 1];
+    b += rgba[d + 2];
+    n++;
+  }
+  if (!n) return [0x2f, 0x5c, 0xf5];
+  return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+}
+
+export function buildIcons() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const src = decodePng(fs.readFileSync(SRC));
+  const bb = bbox(src.rgba, src.w, src.h);
+
+  // 앱 아이콘 — 원본 그대로. 둥근 사각형 배경이 곧 앱 아이콘의 모양이다.
+  fs.writeFileSync(path.join(OUT_DIR, 'icon.png'), encodePng(512, 512, resize(src.rgba, src.w, src.h, 512)));
+
+  // 트레이 — 배경을 버리고 흰 도형만 떼어내 **그 도형의 경계로** 다시 자른다.
+  // 앱 아이콘의 경계 상자(사각형 전체)로 자르면 도형이 프레임 안에서 작아진다.
+  const mask = glyphMask(src.rgba, src.w, src.h);
+  const gb = bbox(mask, src.w, src.h);
+  const accent = accentColor(src.rgba, mask, src.w, src.h);
+  for (const size of [16, 32]) {
+    const px = resize(mask, src.w, src.h, size, gb);
+    const suffix = size === 16 ? '' : '@2x';
+    fs.writeFileSync(path.join(OUT_DIR, `tray${suffix}.png`), encodePng(size, size, tint(px, accent)));
+  }
+  return {
+    src: `${src.w}x${src.h}`,
+    crop: bb.x1 - bb.x0 + 1,
+    glyph: gb.x1 - gb.x0 + 1,
+    accent: accent.map((v) => v.toString(16).padStart(2, '0')).join(''),
+  };
+}
+
+if (process.argv[1] && process.argv[1].endsWith('make-icon.mjs')) {
+  const info = buildIcons();
+  console.log(`icons written to build/ (source ${info.src} → icon.png 512, glyph ${info.glyph}px crop, accent #${info.accent})`);
+}
