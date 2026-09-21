@@ -77,14 +77,6 @@ export function createCard({ corner = 'br', savedPos = null, onMoved = null } = 
     raise()
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-    // 끌어다 놓으면 그 자리를 기억한다
-    win.on('moved', () => {
-      if (!win || win.isDestroyed()) return
-      const b = win.getBounds()
-      freePos = { x: b.x, y: b.y }
-      onMoved?.(freePos)
-    })
-
     win.loadFile(path.join(HERE, '..', 'renderer', 'card.html'))
     win.webContents.once('did-finish-load', () => {
       win.showInactive() // show()가 아니다 — 포커스를 가져가면 안 된다
@@ -142,6 +134,20 @@ export function createCard({ corner = 'br', savedPos = null, onMoved = null } = 
 
   // 카드 위에 마우스가 올라오면 통과를 잠깐 끈다. 버튼이 눌려야 하기
   // 때문이고, 벗어나면 즉시 되돌린다 (CARD-03).
+  // 끌어서 옮기기 (D-26). 창을 옮기는 동안은 저장하지 않고, 놓을 때 한 번 남긴다.
+  ipcMain.on(CH.MOVE, (_e, { dx, dy }) => {
+    if (!win || win.isDestroyed()) return
+    const b = win.getBounds()
+    win.setBounds({ ...b, x: b.x + dx, y: b.y + dy })
+  })
+
+  ipcMain.on(CH.MOVE_END, () => {
+    if (!win || win.isDestroyed()) return
+    const b = win.getBounds()
+    freePos = { x: b.x, y: b.y }
+    onMoved?.(freePos)
+  })
+
   ipcMain.on(CH.HOVER, (_e, on) => {
     hovering = !!on
     if (!win || win.isDestroyed()) return
@@ -238,7 +244,7 @@ export function createCard({ corner = 'br', savedPos = null, onMoved = null } = 
       return true
     },
 
-    async capture(file, { open = false, zoom = 0 } = {}) {
+    async capture(file, { open = false, zoom = 0, hover = false } = {}) {
       if (!win || win.isDestroyed()) return false
 
       // 개발용 — 접힌 원은 68px이라 화면 캡처로는 세부가 안 보인다.
@@ -250,6 +256,25 @@ export function createCard({ corner = 'br', savedPos = null, onMoved = null } = 
             `document.body.style.zoom=${zoom}`
         )
         await new Promise((r) => setTimeout(r, 150))
+      }
+
+      // 개발용 — 진짜 마우스처럼 카드 한가운데로 mousemove를 보낸다.
+      // 클래스를 직접 붙이는 것과 달리, 렌더러가 포인터 이벤트를 실제로
+      // 받고 있는지까지 확인된다.
+      if (hover) {
+        const got = await win.webContents.executeJavaScript(`(() => {
+          const card = document.getElementById('card')
+          const r = card.getBoundingClientRect()
+          document.dispatchEvent(new MouseEvent('mousemove', {
+            clientX: r.left + r.width / 2,
+            clientY: r.top + r.height / 2,
+            bubbles: true,
+          }))
+          // dispatchEvent는 리스너를 동기로 부른다. 기다릴 필요가 없고,
+          // 기다리면 메인의 커서 감시가 "진짜 커서는 창 밖"이라며 먼저 접는다
+          return card.className
+        })()`)
+        console.log(`[card] 호버 후 class="${got}"`)
       }
 
       // 호버 확장은 마우스가 있어야 열린다. 캡처할 때는 강제로 펼친다.

@@ -11,6 +11,8 @@ export const CH = {
   CTL: 'ctl', // { action, appId, sec? }
   STAMP: 'stamp', // 지금 위치에 도장
   HOVER: 'card:hover', // 카드 위 마우스 — 클릭 통과를 잠깐 끈다
+  MOVE: 'card:move', // 끌어서 옮기는 중 (D-26)
+  MOVE_END: 'card:move-end', // 놓았다 — 이 자리를 기억한다
 
   // window ↔ main (전부 invoke/handle — 창은 답을 받아야 그린다)
   QUERY: 'hist:query', // { tab, query, filter } → rows

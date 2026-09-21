@@ -585,6 +585,7 @@ app.whenReady().then(async () => {
           const zoomAt = process.argv.indexOf('--zoom')
           await card.capture(shotFile, {
             open: process.argv.includes('--open'),
+            hover: process.argv.includes('--hover'),
             zoom: zoomAt >= 0 ? Number(process.argv[zoomAt + 1]) : 0,
           })
         }

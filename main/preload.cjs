@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('whenmusic', {
   ctl: (msg) => ipcRenderer.send('ctl', msg),
   stamp: () => ipcRenderer.send('stamp'),
   hover: (on) => ipcRenderer.send('card:hover', !!on),
+  moveBy: (dx, dy) => ipcRenderer.send('card:move', { dx, dy }),
+  moveEnd: () => ipcRenderer.send('card:move-end'),
 
   // 이력 창 — 답을 받아야 그리므로 전부 invoke다
   query: (args) => ipcRenderer.invoke('hist:query', args),

@@ -257,6 +257,42 @@ el.stampList.addEventListener('click', (e) => {
   flash('표시해 둔 지점으로')
 })
 
+// --- 끌어서 옮기기 (D-26) -------------------------------------------------
+//
+// -webkit-app-region: drag를 쓰면 한 줄로 끝나지만, **그 영역은 포인터
+// 이벤트를 렌더러에 주지 않는다.** 카드는 마우스가 들어왔는지로 펼침을
+// 정하므로(CARD-08) 드래그를 얻는 대신 호버를 잃는다. 그래서 손으로 끈다.
+//
+// 좌표는 screenX/Y(화면 절대)를 쓴다 — 창이 따라 움직이는 중이라
+// clientX/Y는 매 프레임 기준이 달라진다.
+let drag = null
+
+el.card.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return
+  // 누를 것 위에서 시작한 것은 끌기가 아니다
+  if (e.target.closest('button, .bar, .stamp-list')) return
+
+  drag = { x: e.screenX, y: e.screenY }
+  e.preventDefault()
+})
+
+window.addEventListener('mousemove', (e) => {
+  if (!drag) return
+
+  const dx = e.screenX - drag.x
+  const dy = e.screenY - drag.y
+  if (dx || dy) {
+    api.moveBy(dx, dy)
+    drag = { x: e.screenX, y: e.screenY }
+  }
+})
+
+window.addEventListener('mouseup', () => {
+  if (!drag) return
+  drag = null
+  api.moveEnd()
+})
+
 // 커서가 카드를 떠났는데 mousemove가 끊겨 펼친 채로 남는 일이 있다.
 // 메인이 커서를 대신 보고 알려 준다.
 api.onUnhover(() => {
