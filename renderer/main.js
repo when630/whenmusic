@@ -245,7 +245,17 @@ function renderList() {
     el.list.append(tab === 'plays' ? playRow(row, i) : stampRow(row, i))
   })
 
-  el.list.querySelector('.row.sel')?.scrollIntoView({ block: 'nearest' })
+  // 커서가 화면 밖으로 나가면 목록이 따라 내려온다. 스크롤 막대를 감췄으므로
+  // 이게 유일한 위치 감각이다 — 'nearest'라 필요한 만큼만 움직인다.
+  const sel = el.list.querySelector('.row.sel')
+  if (sel) {
+    const box = el.list.getBoundingClientRect()
+    const row = sel.getBoundingClientRect()
+    // 날짜 머리가 붙은 첫 줄은 그 머리까지 함께 보이게 한다
+    const head = row.top - box.top < 40 ? sel.previousElementSibling : null
+    if (head?.classList.contains('day')) head.scrollIntoView({ block: 'nearest' })
+    else sel.scrollIntoView({ block: 'nearest' })
+  }
 }
 
 function renderSettings() {

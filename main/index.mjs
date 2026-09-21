@@ -554,6 +554,31 @@ app.whenReady().then(async () => {
   // --shortcut-check — 전역 단축키가 실제로 잡히는지만 보고 나간다.
   // register는 false를 돌려줄 뿐이고, GUI 앱의 stdout은 백그라운드로 돌리면
   // 파이프에 갇혀 보이지 않는다. 그래서 따로 확인할 길이 필요했다.
+  // --scroll-check — 목록의 스크롤 막대가 자리를 차지하는지 잰다
+  if (process.argv.includes('--scroll-check')) {
+    historyWindow.show()
+    setTimeout(async () => {
+      console.log(
+        '[scroll]',
+        await historyWindow.probe(`
+          const m = document.querySelector('main')
+          const spacer = document.createElement('div')
+          spacer.style.height = '3000px'
+          m.append(spacer)
+          const barWidth = m.offsetWidth - m.clientWidth
+          const before = m.scrollTop
+          m.scrollTop = 500
+          const moved = m.scrollTop
+          m.scrollTop = before
+          spacer.remove()
+          return JSON.stringify({ barWidth, scrolls: moved > 0 })
+        `)
+      )
+      app.exit(0)
+    }, 1400)
+    return
+  }
+
   // --esc-test — 이력 창을 열고 Esc를 보내 닫히는지 본다.
   // 렌더러가 키를 받았는지, closeWindow까지 갔는지 단계별로 찍는다.
   if (process.argv.includes('--esc-test')) {
