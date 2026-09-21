@@ -23,8 +23,8 @@ const el = {
 }
 
 // 링의 중심·반지름·둘레 — card.html의 viewBox와 맞아야 한다
-const RING_C = 34
-const RING_R = 31
+const RING_C = 42
+const RING_R = 38.5
 const RING_LENGTH = 2 * Math.PI * RING_R
 
 const ICON = {

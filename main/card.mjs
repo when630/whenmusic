@@ -11,10 +11,10 @@ import { CH } from './ipc.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
-// 카드는 248 너비지만(시안 확정안), 창은 호버로 펼쳐지는 도장 목록까지
-// 담아야 한다 (CARD-08).
-export const WIN_W = 280
-export const WIN_H = 200
+// 카드는 292 너비지만, 창은 호버로 펼쳐지는 도장 목록까지 담아야 한다
+// (CARD-08). 접혀 있을 때는 이 안의 104px 원만 쓴다.
+export const WIN_W = 336
+export const WIN_H = 250
 const MARGIN = 16
 
 // 전체화면 앱이 나중에 뜨면 같은 z-order 밴드에서 우리 위로 올라간다.
