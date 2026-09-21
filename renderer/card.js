@@ -89,7 +89,8 @@ function renderStampList(stamps, durSec) {
         const row = document.createElement('span')
         row.className = 'one'
         row.dataset.pos = String(st.posSec)
-        row.textContent = fmt(st.posSec)
+        // 기준점이 낡았을 때 찍힌 것은 근사다 — 그 사실을 숨기지 않는다 (D-23)
+        row.textContent = (st.trusted === false ? '≈' : '') + fmt(st.posSec)
         return row
       })
   )

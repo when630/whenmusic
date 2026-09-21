@@ -257,3 +257,43 @@ test('날짜별 청취 시간을 합친다 (HIST-07)', () => {
   assert.equal(totals[0].n, 2)
   store.close()
 })
+
+test('v1 파일을 열면 v2로 올리고 직전 상태를 백업한다', () => {
+  const { file, store } = tmpStore()
+  const playId = store.startPlay({ sourceApp: 'Chrome', title: '믹스', channel: 'c', startedAt: 1 })
+  store.addStamp({ playId, posSec: 10, at: 1 })
+  store.close()
+
+  // v1 시절 모양으로 되돌린다 — 컬럼을 떼고 버전을 낮춘다
+  const raw = new DatabaseSync(file)
+  raw.exec('ALTER TABLE stamps DROP COLUMN pos_trusted')
+  raw.exec('PRAGMA user_version = 1')
+  raw.close()
+
+  const reopened = createStore(file)
+  assert.equal(reopened.ok, true)
+  assert.equal(reopened.state.reason, null)
+
+  // 자료는 그대로 있고, 기존 도장은 믿는 쪽으로 채워진다 (D-23)
+  const stamps = reopened.allStamps()
+  assert.equal(stamps.length, 1)
+  assert.equal(stamps[0].pos_trusted, 1)
+
+  // 이행 전 백업이 남았다
+  const backups = fs.readdirSync(path.join(path.dirname(file), 'backups'))
+  assert.equal(backups.some((f) => f.startsWith('store-v1-')), true)
+  reopened.close()
+})
+
+test('낡은 기준점에서 찍힌 도장은 그 사실을 달고 저장된다 (D-23)', () => {
+  const { store } = tmpStore()
+  const playId = store.startPlay({ sourceApp: 'Chrome', title: '믹스', channel: 'c', startedAt: 1 })
+
+  store.addStamp({ playId, posSec: 7, at: 10, posTrusted: false })
+  store.addStamp({ playId, posSec: 650, at: 20, posTrusted: true })
+
+  const rows = store.stampsOf(playId)
+  assert.equal(rows.find((r) => r.pos_sec === 7).pos_trusted, 0)
+  assert.equal(rows.find((r) => r.pos_sec === 650).pos_trusted, 1)
+  store.close()
+})

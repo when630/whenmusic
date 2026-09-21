@@ -67,12 +67,22 @@ CREATE TABLE stamps (
 CREATE INDEX stamps_play ON stamps(play_id, at);
 `
 
-const MIGRATIONS = [(db) => db.exec(V1_SQL)]
+// v2 — 도장이 믿을 수 있는 위치에 찍혔는지 (D-23).
+//
+// 기존 도장은 1(믿음)로 들어간다. 언제 찍혔는지 거슬러 알 수 없으므로
+// 판단을 미루지 않고 기본값을 준다 — 대부분은 정상이었을 것이다.
+const V2_SQL = `
+ALTER TABLE stamps ADD COLUMN pos_trusted INTEGER NOT NULL DEFAULT 1;
+`
+
+const MIGRATIONS = [(db) => db.exec(V1_SQL), (db) => db.exec(V2_SQL)]
 
 /** 스키마가 실제로 만드는 표 이름 — 가드 테스트가 이것과 대조한다. */
 export function schemaTables() {
   const names = new Set()
-  for (const m of V1_SQL.matchAll(/CREATE TABLE (\w+)/g)) names.add(m[1])
+  for (const sql of [V1_SQL, V2_SQL]) {
+    for (const m of sql.matchAll(/CREATE TABLE (\w+)/g)) names.add(m[1])
+  }
   return [...names].sort()
 }
 
@@ -508,13 +518,13 @@ export function createStore(file) {
 
     // --- 도장 (STMP) ---
 
-    addStamp({ playId, posSec, at }) {
+    addStamp({ playId, posSec, at, posTrusted = true }) {
       if (!state.ok || playId == null) return null
-      const info = q('INSERT INTO stamps (play_id, pos_sec, at) VALUES (?, ?, ?)').run(
-        playId,
-        posSec,
-        at
-      )
+
+      const info = q(
+        'INSERT INTO stamps (play_id, pos_sec, at, pos_trusted) VALUES (?, ?, ?, ?)'
+      ).run(playId, posSec, at, posTrusted ? 1 : 0)
+
       return Number(info.lastInsertRowid)
     },
 
@@ -610,8 +620,8 @@ export function createStore(file) {
         }
 
         const insertStamp = q(
-          `INSERT INTO stamps (id, play_id, pos_sec, at, confirmed_at, deleted_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO stamps (id, play_id, pos_sec, at, confirmed_at, deleted_at, pos_trusted)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
 
         for (const st of stamps) {
@@ -621,7 +631,8 @@ export function createStore(file) {
             st.pos_sec,
             st.at,
             st.confirmed_at ?? null,
-            st.deleted_at ?? null
+            st.deleted_at ?? null,
+            st.pos_trusted === 0 ? 0 : 1
           )
         }
 

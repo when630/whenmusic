@@ -209,3 +209,27 @@ test('도장을 찍었으면 짧아도 남긴다', () => {
   assert.equal(store.recentPlays().some((r) => r.title === '짧게 스친 곡'), true)
   store.close()
 })
+
+test('기준점이 낡았을 때 찍힌 도장은 근사로 남는다 (D-23)', () => {
+  const { tr, store } = rig()
+
+  // 앱이 켜질 때 이미 재생 중이던 세션 — 위치를 믿지 못한다 (§5)
+  tr.seed([session()])
+  tr.tick()
+  tr.stamp()
+
+  assert.equal(store.allStamps()[0].pos_trusted, 0)
+  assert.equal(tr.snapshot().stamps[0].trusted, false)
+  store.close()
+})
+
+test('이벤트로 기준점을 잡은 뒤 찍은 도장은 믿는다', () => {
+  const { tr, store } = rig()
+  play(tr) // session-added는 이벤트라 기준점을 믿는다
+  tr.tick()
+  tr.stamp()
+
+  assert.equal(store.allStamps()[0].pos_trusted, 1)
+  assert.equal(tr.snapshot().stamps[0].trusted, true)
+  store.close()
+})

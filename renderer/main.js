@@ -193,7 +193,9 @@ function stampRow(row, i) {
 
   const p = document.createElement('span')
   p.className = 'tm'
-  p.textContent = pos(row.pos_sec)
+  // 낡은 기준점에서 찍힌 도장은 위치가 근사다 (D-23)
+  p.textContent = (row.pos_trusted === 0 ? '≈' : '') + pos(row.pos_sec)
+  if (row.pos_trusted === 0) p.title = '기준점이 낡은 상태에서 찍혀 위치가 근사입니다'
   div.append(p)
 
   return div

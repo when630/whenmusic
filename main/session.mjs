@@ -351,9 +351,12 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
       if (!store?.ok || playId == null || !currentId) return null
 
       const s = sessions.get(currentId)
-      const posSec = interpolate(anchors.get(currentId), clock(), s?.timeline?.duration ?? null)
+      const anchor = anchors.get(currentId)
+      const posSec = interpolate(anchor, clock(), s?.timeline?.duration ?? null)
 
-      store.addStamp({ playId, posSec, at: clock() })
+      // 기준점이 낡았으면 이 위치도 근사다. 막지는 않되 그 사실을 적어 둔다
+      // — 나중에 되돌아갈 때 엉뚱한 곳으로 데려가지 않으려면 알아야 한다 (§5 · D-23)
+      store.addStamp({ playId, posSec, at: clock(), posTrusted: anchor?.trusted ?? false })
       stamps = store.stampsOf(playId)
       return posSec
     },
@@ -417,7 +420,11 @@ export function createTracker({ clock = Date.now, backSec = 10, store = null } =
         durText: hms(durSec),
         caps: caps.get(id) ?? null,
         // 진행바에 눈금으로 남는다 (CARD-07 · STMP-06)
-        stamps: stamps.map((st) => ({ posSec: st.pos_sec, at: st.at })),
+        stamps: stamps.map((st) => ({
+          posSec: st.pos_sec,
+          at: st.at,
+          trusted: st.pos_trusted !== 0,
+        })),
         backSec,
       }
     },
