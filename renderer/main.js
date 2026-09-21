@@ -356,7 +356,17 @@ function renderSettings() {
 
 // --- 불러오기 --------------------------------------------------------------
 
-async function load() {
+async function // WHENCOMMAND가 검색어와 함께 불렀다
+api.onSearch((q) => {
+  tab = 'plays'
+  query = q ?? ''
+  cursor = 0
+  el.q.value = query
+  el.search.hidden = false
+  load()
+})
+
+load() {
   el.hint.textContent = HINT[tab]
   el.cho.hidden = !(query.trim() && terms().length === 0)
 

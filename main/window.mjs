@@ -111,6 +111,16 @@ export function createWindow({ settings }) {
       win.webContents.send(channel, payload)
     },
 
+    /** 창이 아직 로딩 중이면 보낸 것이 사라진다 — 다 뜬 뒤에 보낸다. */
+    sendWhenReady(channel, payload) {
+      if (!win || win.isDestroyed()) return
+      if (win.webContents.isLoading()) {
+        win.webContents.once('did-finish-load', () => win.webContents.send(channel, payload))
+      } else {
+        win.webContents.send(channel, payload)
+      }
+    },
+
     async capture(file, { tab = null } = {}) {
       if (!win || win.isDestroyed()) return false
 

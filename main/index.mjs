@@ -1,10 +1,12 @@
 // 앱 부트. 배선만 한다 — 계산은 session.mjs, 창은 card.mjs, 애드온은 control.mjs.
 import { app, dialog, globalShortcut, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 import { createCard } from './card.mjs'
 import { applyImport, buildExport } from './data.mjs'
+import { APP_ID, SCHEME, buildManifest, fromArgv, parseDeepLink } from './deeplink.mjs'
 import { createControl } from './control.mjs'
 import { ACTION, CH } from './ipc.mjs'
 import { MIN_PLAY_SEC, PLAYBACK, createTracker } from './session.mjs'
@@ -41,6 +43,14 @@ const selftestMode = process.argv.includes('--selftest')
 // --watch-events — Worker가 SMTC 이벤트를 실제로 받는지 12초 동안 지켜본다.
 // 카드도 창도 띄우지 않는다.
 const watchEvents = process.argv.includes('--watch-events')
+
+// whenmusic:// 를 이 앱이 받는다 (when-protocol). 개발 실행에서는 실행 파일과
+// 인자를 함께 넘겨야 electron.exe가 아니라 이 프로젝트가 열린다.
+if (app.isPackaged) {
+  app.setAsDefaultProtocolClient(SCHEME)
+} else if (process.argv[1]) {
+  app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1])])
+}
 
 // %APPDATA%\whenmusic\store.sqlite — 형제 앱과 폴더가 다르다 (PLAT-05)
 // 데모는 임시 폴더를 쓴다 — 눈으로 확인하자고 진짜 기록을 더럽힐 이유가 없다
@@ -528,6 +538,8 @@ app.whenReady().then(async () => {
   wireIpc()
   wireWindowIpc()
 
+  writeManifest()
+
   // 지운 지 30일이 지난 것만 실제로 지운다 (STOR-04)
   store.purgeDeleted(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
@@ -584,6 +596,10 @@ app.whenReady().then(async () => {
   card.start()
   lifecycle.start({ onApplySetting: applySetting })
 
+  // 앱이 꺼져 있을 때 부르면 URL이 첫 argv로 온다
+  const launchUrl = fromArgv(process.argv)
+  if (launchUrl) setTimeout(() => handleDeepLink(launchUrl), 600)
+
   // 켜고 1분 뒤 한 번, 이후 하루 한 번. 설치는 앱을 끌 때 (REL-02 · REL-03)
   updater = setupUpdater({ state: updateState, onChange: () => lifecycle.refresh() })
   wireShortcuts()
@@ -624,9 +640,57 @@ app.whenReady().then(async () => {
   }
 })
 
+/**
+ * WHENCOMMAND가 보낸 딥링크 (when-protocol).
+ *
+ * 셋 다 "손이 멀리 있을 때" 쓰는 것이라 창을 함부로 띄우지 않는다 —
+ * `now`와 `stamp`는 카드가 잠깐 펼쳐지는 것으로 답한다.
+ */
+function handleDeepLink(raw) {
+  const link = parseDeepLink(raw)
+  if (!link) return false
+
+  const { command, args } = link
+
+  if (command === 'now') {
+    const snap = tracker.snapshot()
+    flashOnce = snap.state === 'empty' ? '재생 중인 것이 없습니다' : '지금 듣는 것'
+    paint()
+  } else if (command === 'stamp') {
+    stamp()
+  } else if (command === 'history') {
+    historyWindow.show()
+    // 창이 아직 로딩 중이면 push가 사라진다 — 뜬 뒤에 보낸다
+    if (args.q) historyWindow.sendWhenReady(CH.SEARCH, args.q)
+  }
+  return true
+}
+
+/** 실행될 때마다 덮어쓴다. 실패해도 앱은 멈추지 않는다 — 연동은 더해지는 것이지 전제가 아니다. */
+function writeManifest() {
+  try {
+    const dir = path.join(os.homedir(), '.when', 'apps')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, `${APP_ID}.json`),
+      JSON.stringify(
+        buildManifest({ exePath: app.getPath('exe'), packaged: app.isPackaged }),
+        null,
+        2
+      )
+    )
+  } catch {
+    // 못 써도 그만이다
+  }
+}
+
 // 이미 돌고 있는데 또 실행하면 창을 띄운다. 트레이를 못 찾았거나 단축키가
 // 다른 앱에 막혔을 때 남는 유일한 길이기도 하다.
-app.on('second-instance', () => historyWindow.show())
+app.on('second-instance', (_e, argv) => {
+  const url = fromArgv(argv)
+  if (url) handleDeepLink(url)
+  else historyWindow.show()
+})
 
 app.on('window-all-closed', () => {
   // 카드를 닫아도 앱은 살아 있어야 한다 (HIST-09). 종료는 트레이에서 한다.

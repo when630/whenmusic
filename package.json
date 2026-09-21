@@ -59,6 +59,14 @@
         "owner": "when630",
         "repo": "whenmusic"
       }
+    ],
+    "protocols": [
+      {
+        "name": "WHENMUSIC",
+        "schemes": [
+          "whenmusic"
+        ]
+      }
     ]
   }
 }

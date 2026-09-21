@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('whenmusic', {
   moveEnd: () => ipcRenderer.send('card:move-end'),
 
   // 이력 창 — 답을 받아야 그리므로 전부 invoke다
+  onSearch: (fn) => ipcRenderer.on('hist:search', (_e, q) => fn(q)),
   query: (args) => ipcRenderer.invoke('hist:query', args),
   resume: (args) => ipcRenderer.invoke('hist:resume', args),
   remove: (args) => ipcRenderer.invoke('hist:remove', args),
