@@ -17,7 +17,12 @@ const el = {
   progress: document.getElementById('progress'),
   toggle: document.getElementById('icon-toggle'),
   stampList: document.getElementById('stampList'),
+  ring: document.getElementById('ring'),
+  ringFill: document.getElementById('ringFill'),
 }
+
+// 링 둘레 — CSS의 r과 맞아야 한다
+const RING_LENGTH = 2 * Math.PI * 25.5
 
 const ICON = {
   play: 'M8 5v14l11-7z',
@@ -55,10 +60,19 @@ function render(next) {
   const known = Number.isFinite(durSec) && durSec > 0
   el.progress.hidden = !known
 
+  // 길이를 모르면 링도 그리지 않는다 — 0에서 멈춘 링은 진행바와 똑같이
+  // 고장으로 읽힌다 (CARD-12)
+  el.ring.style.visibility = known ? 'visible' : 'hidden'
+
   if (known) {
     el.now.textContent = next.nowText
     el.dur.textContent = next.durText
-    el.fill.style.width = `${Math.min(100, (posSec / durSec) * 100)}%`
+
+    const ratio = Math.min(1, Math.max(0, posSec / durSec))
+    el.fill.style.width = `${ratio * 100}%`
+    el.ringFill.style.strokeDasharray = String(RING_LENGTH)
+    el.ringFill.style.strokeDashoffset = String(RING_LENGTH * (1 - ratio))
+
     drawStamps(stamps ?? [], durSec)
   }
 

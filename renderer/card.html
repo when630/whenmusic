@@ -10,6 +10,11 @@
 
 <div id="card" class="card" data-state="empty">
   <div class="art" id="art"></div>
+  <!-- 접혀 있을 때 원 둘레가 진행바가 된다. 펼치면 아래 진행바에 자리를 내준다 -->
+  <svg class="ring" id="ring" viewBox="0 0 56 56" aria-hidden="true">
+    <circle class="ring-bg" cx="28" cy="28" r="25.5"></circle>
+    <circle class="ring-fill" id="ringFill" cx="28" cy="28" r="25.5"></circle>
+  </svg>
   <!-- 전면 덮개가 아니라 왼쪽에서 오른쪽으로 빠지는 띠 — 글자가 놓인 쪽만 덮는다 (D-09) -->
   <div class="veil"></div>
 
