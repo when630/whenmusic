@@ -58,6 +58,10 @@ export function createWindow({ settings }) {
       webPreferences: { preload: path.join(HERE, 'preload.cjs') },
     })
 
+    // Electron 기본 메뉴를 뗀다 — 메뉴가 있으면 Windows에서 Alt 한 번에 메뉴바가 떠 단축키 잡기 중 Alt 조합을 가로챈다(2026-09-28).
+    // setMenu는 Windows·Linux 전용이라 옵셔널 호출 — macOS는 앱 메뉴를 쓰므로 건드리지 않는다
+    win.setMenu?.(null)
+
     // 렌더러가 조용히 죽으면 창은 멀쩡해 보이고 키만 안 먹는다.
     // 개발 중에는 그 소리를 들리게 한다.
     if (!app.isPackaged) {
