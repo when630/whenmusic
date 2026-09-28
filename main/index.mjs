@@ -448,7 +448,9 @@ function wireWindowIpc() {
 function applySetting(key, value) {
   if (key === 'corner') card.setCorner(value)
   if (key === 'backSec' || key === 'corner') lifecycle.refresh()
-  if (key === 'autoStart') app.setLoginItemSettings({ openAtLogin: !!value, args: ['--hidden'] })
+  // 개발 실행에서는 등록하지 않는다 — 앱 이름이 'Electron'이라 node_modules의 electron.exe가 앱 경로 없이
+  // 로그인 항목(electron.app.Electron)에 들어가고, 로그인마다 Electron 기본 앱 창이 뜬다(2026-09-28 실측)
+  if (key === 'autoStart' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!value, args: ['--hidden'] })
   // backSec·blur는 다음 그리기에 실린다
   paint()
 }
