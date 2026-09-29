@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { trayImage } from './platform/index.mjs'
+import { hotkeyLabel } from './settings.mjs'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -27,7 +28,10 @@ export function createLifecycle({
 
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: '이력 창 열기', accelerator: 'Ctrl+Alt+P', click: onToggleWindow },
+        {
+          label: `이력 창 열기${settings.get('hotkeys')?.history ? ` (${hotkeyLabel(settings.get('hotkeys').history)})` : ''}`,
+          click: onToggleWindow,
+        },
         ...(shortcutFailures().length
           ? [
               {

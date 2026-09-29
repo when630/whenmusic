@@ -43,6 +43,8 @@ export function updateLine(state, { current = app.getVersion?.() ?? '' } = {}) {
       return `새 버전 ${state.version} — 앱을 끄면 설치됩니다`
     case 'error':
       return state.error ?? '업데이트를 확인하지 못했습니다'
+    case 'unsupported':
+      return `버전 ${current} — 업데이트 확인은 설치본에서만`
     default:
       return `버전 ${current}`
   }
@@ -69,7 +71,10 @@ export function friendlyUpdateError(err) {
 
 export function setupUpdater({ state, onChange }) {
   // 개발 중에는 확인하지 않는다 — 포장되지 않은 앱은 갱신할 대상이 없다
-  if (!app.isPackaged) return { check: () => {}, stop: () => {} }
+  if (!app.isPackaged) {
+    state.status = 'unsupported'
+    return { check: async () => state, install: () => ({ installing: false, opened: false }), openReleases: () => {}, stop: () => {}, supported: false }
+  }
 
   let timer = null
   const change = () => onChange?.(state)
@@ -114,12 +119,24 @@ export function setupUpdater({ state, onChange }) {
     change()
   })
 
-  function check() {
-    autoUpdater.checkForUpdates().catch((err) => {
+  // 설정 화면은 결과 줄을 받아야 하므로 끝날 때까지 기다린다. 트레이는 기다리지 않고 부른다.
+  async function check() {
+    try {
+      await autoUpdater.checkForUpdates()
+    } catch (err) {
       state.status = 'error'
       state.error = friendlyUpdateError(err)
       change()
-    })
+    }
+    return state
+  }
+
+  // 설정 화면의 "지금 설치". 내려받아 둔 것이 있을 때만 재시작하며 갈아끼운다 —
+  // 평소 경로(끌 때 설치)를 대신하는 것이 아니라, 지금 당장 바꾸고 싶은 사람을 위한 문이다.
+  function install() {
+    if (state.status !== 'ready') return { installing: false, opened: false }
+    setImmediate(() => autoUpdater.quitAndInstall())
+    return { installing: true, opened: false }
   }
 
   const first = setTimeout(check, FIRST_CHECK_MS)
@@ -127,6 +144,8 @@ export function setupUpdater({ state, onChange }) {
 
   return {
     check,
+    install,
+    supported: true,
     openReleases: () => shell.openExternal(RELEASES_URL),
     stop() {
       clearTimeout(first)

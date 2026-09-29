@@ -22,5 +22,8 @@ contextBridge.exposeInMainWorld('whenmusic', {
   restore: (args) => ipcRenderer.invoke('hist:restore', args),
   settings: () => ipcRenderer.invoke('settings:get'),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  setHotkey: (key, accel) => ipcRenderer.invoke('hotkey:set', key, accel),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
   openDataDir: () => ipcRenderer.invoke('data:open'),
 })

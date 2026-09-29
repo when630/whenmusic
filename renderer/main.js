@@ -29,6 +29,7 @@ let query = ''
 let onlyUnconfirmed = false
 let settings = null
 let lastRemoved = null // U로 되돌릴 대상 (STOR-04)
+let hotkeyCapture = null // { key, mods } — 설정 탭에서 단축키 조합을 누르는 중 (PLAT-05)
 
 // --- 시간 표기 -------------------------------------------------------------
 
@@ -258,6 +259,77 @@ function renderList() {
   }
 }
 
+// ── 단축키 잡기 — 글자로 치는 대신 실제로 누른다 (WHENWORK today.js 승계)
+//
+// KeyboardEvent.code → Electron 가속기 키 이름. 레이아웃에 흔들리지 않게 code를 쓴다
+// (key를 쓰면 한글 자판에서 'ㅁ' 같은 것이 온다). 수식키 없는 키 하나는 받지 않는다 —
+// 전역 단축키가 맨 글자 하나를 가로채면 그 글자를 다른 앱에서 칠 수 없게 된다.
+const CODE_TO_ACCEL = {
+  Space: 'Space', Enter: 'Return', NumpadEnter: 'Return', Tab: 'Tab', Delete: 'Delete', Insert: 'Insert',
+  Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+  Minus: '-', Equal: '=', Comma: ',', Period: '.', Slash: '/', Semicolon: ';',
+  BracketLeft: '[', BracketRight: ']',
+}
+CODE_TO_ACCEL.Backslash = String.fromCharCode(92)
+CODE_TO_ACCEL.Backquote = String.fromCharCode(96)
+CODE_TO_ACCEL.Quote = String.fromCharCode(39)
+function accelKeyOf(e) {
+  const code = e.code || ''
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code
+  if (/^Numpad[0-9]$/.test(code)) return 'num' + code.slice(6)
+  return CODE_TO_ACCEL[code] ?? null
+}
+function accelModsOf(e) {
+  const mods = []
+  if (e.ctrlKey) mods.push('Control')
+  if (e.altKey) mods.push('Alt')
+  if (e.shiftKey) mods.push('Shift')
+  if (e.metaKey) mods.push('Super')
+  return mods
+}
+// 미리보기용 사람 표기 — main의 hotkeyLabel과 같은 규칙을 화면에서 흉내낸다
+const ACCEL_LABEL = { Control: 'Ctrl', Super: 'Win', Left: '←', Right: '→', Up: '↑', Down: '↓' }
+function accelLabel(parts) {
+  return parts.filter(Boolean).map((x) => ACCEL_LABEL[x] ?? x).join('+')
+}
+
+async function finishHotkeyCapture(accel) {
+  const cap = hotkeyCapture
+  hotkeyCapture = null
+  if (!cap || accel === null) return renderSettings()
+  const r = await api.setHotkey(cap.key, accel)
+  settings = r
+  renderSettings()
+  el.hint.textContent = r.ok
+    ? accel
+      ? `단축키를 ${r.label} 로 바꿨습니다`
+      : '단축키를 비웠습니다'
+    : (r.error ?? '단축키를 등록하지 못했습니다')
+}
+
+function onHotkeyCaptureKey(e) {
+  e.preventDefault()
+  e.stopPropagation()
+  if (e.key === 'Escape') return finishHotkeyCapture(null)
+  const mods = accelModsOf(e)
+  if (e.code === 'Backspace' && !mods.length) return finishHotkeyCapture('')
+  const key = accelKeyOf(e)
+  if (!key) {
+    // 수식키만 눌린 상태 — 여기까지 잡혔다고 보여 준다
+    hotkeyCapture.mods = mods
+    renderSettings()
+    return
+  }
+  if (!mods.length) {
+    el.hint.textContent = 'Ctrl·Alt·Shift 중 하나는 함께 누르세요'
+    return
+  }
+  return finishHotkeyCapture([...mods, key].join('+'))
+}
+
 function renderSettings() {
   el.list.replaceChildren()
   if (!settings) return
@@ -337,6 +409,42 @@ function renderSettings() {
     )
   )
 
+  // 전역 단축키 — 칸을 누르고 원하는 조합을 그대로 누르면 잡힌다. main이 등록까지 해 보고
+  // 성공했을 때만 저장한다. Esc 취소 · Backspace 비움(그 자리를 안 쓴다).
+  for (const key of Object.keys(settings.hotkeys ?? {})) {
+    const box = document.createElement('div')
+    box.className = 'choices'
+    const btn = document.createElement('button')
+    btn.className = 'hk'
+    const accel = settings.hotkeys[key]
+    const ok = settings.hotkeyOk?.[key]
+    if (hotkeyCapture?.key === key) {
+      btn.textContent = hotkeyCapture.mods.length ? `${accelLabel(hotkeyCapture.mods)} + …` : '누르세요… (Esc 취소)'
+      btn.classList.add('cap')
+    } else if (!accel) {
+      btn.textContent = '없음'
+    } else {
+      btn.textContent = settings.hotkeyLabels?.[key] ?? accel
+      btn.classList.add('on')
+      if (ok === false) btn.classList.add('bad')
+    }
+    btn.addEventListener('click', () => {
+      hotkeyCapture = { key, mods: [] }
+      renderSettings()
+    })
+    box.append(btn)
+    const isDefault = accel === settings.hotkeyDefaults?.[key]
+    item(
+      `단축키 · ${settings.hotkeyNames?.[key] ?? key}`,
+      accel && ok === false
+        ? '등록 실패 — 다른 앱이 쓰고 있습니다. 눌러서 바꾸세요'
+        : isDefault
+          ? '눌러서 바꾼다 · Backspace로 비움'
+          : `기본값 ${accelLabel((settings.hotkeyDefaults?.[key] ?? '').split('+'))}`,
+      box
+    )
+  }
+
   item(
     '로그인할 때 시작',
     '트레이에 상주하며 카드를 띄운다',
@@ -349,6 +457,38 @@ function renderSettings() {
       (v) => set('autoStart', v)
     )
   )
+
+  // 업데이트 — 트레이 메뉴와 같은 줄. 상태에 따라 할 일이 하나뿐이라 버튼도 하나다:
+  // 준비됐으면 지금 설치, 아니면 지금 확인. 받아 둔 것은 그냥 둬도 끌 때 설치된다.
+  {
+    const u = settings.update ?? {}
+    const box = document.createElement('div')
+    box.className = 'choices'
+    const btn = document.createElement('button')
+    const busy = u.status === 'checking' || u.status === 'downloading' || u.status === 'available'
+    btn.textContent = u.status === 'ready' ? '지금 설치' : busy ? '진행 중…' : '지금 확인'
+    btn.disabled = busy || u.supported === false
+    if (u.status === 'ready') btn.classList.add('on')
+    btn.addEventListener('click', async () => {
+      if (u.status === 'ready') {
+        const r = await api.updateInstall()
+        if (!r.installing) el.hint.textContent = '아직 설치할 것이 준비되지 않았습니다'
+        return
+      }
+      btn.disabled = true
+      btn.textContent = '확인 중…'
+      const r = await api.updateCheck()
+      settings = r
+      renderSettings()
+      el.hint.textContent = r.line ?? '확인했습니다'
+    })
+    box.append(btn)
+    item(
+      u.line ?? `버전 ${u.current ?? ''}`,
+      u.supported === false ? '개발 실행에서는 확인하지 않는다' : '하루에 한 번 알아서 확인하고, 받아 둔 것은 앱을 끌 때 설치한다',
+      box
+    )
+  }
 
   const path = document.createElement('div')
   path.className = 'path'
@@ -486,6 +626,9 @@ function closeSearch() {
 }
 
 document.addEventListener('keydown', (e) => {
+  // 단축키를 잡는 중이면 어떤 키든 조합으로 읽는다 — j/k·Tab·Esc도 여기서는 글자다
+  if (hotkeyCapture) return onHotkeyCaptureKey(e)
+
   if (!el.help.hidden) {
     if (e.key === 'Escape' || e.key === '?') el.help.hidden = true
     return
@@ -550,6 +693,16 @@ document.addEventListener('keydown', (e) => {
       if (!el.search.hidden) closeSearch()
       else api.closeWindow()
       break
+  }
+})
+
+// 수식키를 뗐을 때 미리보기를 되돌린다
+document.addEventListener('keyup', (e) => {
+  if (!hotkeyCapture) return
+  const mods = accelModsOf(e)
+  if (mods.length !== hotkeyCapture.mods.length) {
+    hotkeyCapture.mods = mods
+    renderSettings()
   }
 })
 

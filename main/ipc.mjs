@@ -23,6 +23,9 @@ export const CH = {
   CLOSE: 'win:close', // window → main. Esc와 × 버튼이 부른다
   SETTINGS: 'settings:get',
   SET_SETTING: 'settings:set',
+  SET_HOTKEY: 'hotkey:set', // (key, accel) → 등록까지 해 보고 성공했을 때만 저장한다 (PLAT-05)
+  UPDATE_CHECK: 'update:check', // 확인이 끝난 뒤 결과 줄을 돌려준다 (REL-02)
+  UPDATE_INSTALL: 'update:install', // 받아 둔 것이 있으면 재시작하며 설치 (REL-03)
   OPEN_DATA_DIR: 'data:open', // 설정 화면이 데이터 폴더를 열어 준다 (DATA-03)
 }
 

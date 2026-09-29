@@ -317,6 +317,22 @@ main::-webkit-scrollbar {
   border-color: var(--music);
   background: var(--music-dim);
 }
+/* 단축키 칸 — 누르면 잡기 모드, 등록에 실패한 조합은 빨갛게 */
+.set .choices button.hk {
+  font-family: var(--font-mono);
+  min-width: 96px;
+  text-align: center;
+}
+.set .choices button.hk.cap {
+  color: var(--warning, #e0af68);
+  border-color: var(--warning, #e0af68);
+  border-style: dashed;
+}
+.set .choices button.hk.bad {
+  color: var(--danger, #f7768e);
+  border-color: var(--danger, #f7768e);
+  background: transparent;
+}
 .set .path {
   font-family: var(--font-mono);
   font-size: 10.5px;

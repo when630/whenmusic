@@ -12,7 +12,7 @@ import { ACTION, CH } from './ipc.mjs'
 import { MIN_PLAY_SEC, PLAYBACK, createTracker } from './session.mjs'
 import { createLifecycle } from './lifecycle.mjs'
 import { smtcSupport } from './platform/index.mjs'
-import { createSettings } from './settings.mjs'
+import { DEFAULT_HOTKEYS, HOTKEY_LABELS, createSettings, hotkeyLabel, sanitizeHotkeys } from './settings.mjs'
 import { createStore } from './store.mjs'
 import { createUpdateState, setupUpdater, updateLine } from './update.mjs'
 import { createWindow } from './window.mjs'
@@ -430,15 +430,44 @@ function wireWindowIpc() {
     return true
   })
 
-  ipcMain.handle(CH.SETTINGS, () => ({ ...settings.all, dataDir: DATA_DIR }))
+  ipcMain.handle(CH.SETTINGS, () => settingsSnapshot())
 
   ipcMain.handle(CH.SET_SETTING, (_e, key, value) => {
+    if (key === 'hotkeys') return settingsSnapshot() // 단축키는 hotkey:set으로만 — 등록 확인 없이 저장하면 안 된다
     settings.set(key, value)
     applySetting(key, value)
-    return { ...settings.all, dataDir: DATA_DIR }
+    return settingsSnapshot()
+  })
+
+  // PLAT-05: 조합을 바꾸면 **그 조합의 등록 성공 여부까지** 확인해서 돌려준다. 실패하면 저장하지
+  // 않고 이전 조합으로 되돌린다 — 저장해 두면 다음 실행에서도 안 잡히는 조합으로 조용히 시작한다.
+  // 빈 문자열은 "이 자리는 안 쓴다"라 실패가 아니다.
+  ipcMain.handle(CH.SET_HOTKEY, (_e, key, accel) => {
+    if (!(key in HOTKEY_ACTIONS)) return { ok: false, error: '모르는 단축키 자리입니다', ...settingsSnapshot() }
+    const next = String(accel ?? '').trim()
+    const prev = sanitizeHotkeys(settings.get('hotkeys'))
+    const res = wireShortcuts({ [key]: next })
+    if (next && !res[key]) {
+      wireShortcuts()
+      return {
+        ok: false,
+        error: `${hotkeyLabel(next)} 를 등록하지 못했습니다 — 다른 앱이 쓰고 있거나 잘못된 조합입니다. 이전 조합을 유지합니다`,
+        ...settingsSnapshot(),
+      }
+    }
+    settings.set('hotkeys', { ...prev, [key]: next })
+    lifecycle.refresh()
+    return { ok: true, label: hotkeyLabel(next), ...settingsSnapshot() }
   })
 
   ipcMain.handle(CH.OPEN_DATA_DIR, () => shell.openPath(DATA_DIR))
+
+  // ── 업데이트 (REL-02 · REL-03). 확인은 끝날 때까지 기다렸다가 결과 줄을 돌려준다.
+  ipcMain.handle(CH.UPDATE_CHECK, async () => {
+    await updater?.check()
+    return { ok: true, ...updateInfo() }
+  })
+  ipcMain.handle(CH.UPDATE_INSTALL, () => ({ ok: true, ...(updater?.install() ?? { installing: false, opened: false }) }))
 
   // 렌더러의 window.close()는 Chromium이 막는 경우가 있다 — 닫기는 메인이 한다
   ipcMain.on(CH.CLOSE, () => historyWindow.hide())
@@ -462,20 +491,69 @@ function applySetting(key, value) {
  * 이미 그 조합을 쥐고 있으면 조용히 등록되지 않고, 사용자는 "눌러도 아무
  * 일이 없다"만 겪는다. 실패를 남겨 두고 트레이에 띄운다.
  */
-function wireShortcuts() {
-  const keys = [
-    ['Control+Alt+Left', () => rewind(), '되감기'],
-    ['Control+Alt+Right', () => forward(), '앞으로'],
-    ['Control+Alt+S', stamp, '도장'],
-    ['Control+Alt+P', () => historyWindow.toggle(), '이력 창'],
-  ]
+const HOTKEY_ACTIONS = {
+  rewind: () => rewind(),
+  forward: () => forward(),
+  stamp: () => stamp(),
+  history: () => historyWindow.toggle(),
+}
+let hotkeyOk = {} // 자리 → 등록 성공 여부. 설정 화면이 빨갛게 적을 근거다
 
-  shortcutFailures = keys
-    .filter(([accel, fn]) => !globalShortcut.register(accel, fn))
-    .map(([accel, , label]) => `${label} ${accel.replace('Control', 'Ctrl')}`)
+// 조합은 settings.json의 hotkeys에서 읽는다. override로 한 자리만 바꿔 볼 수 있다 —
+// hotkey:set이 성공 여부를 보고 저장을 결정한다. 몇 번을 불러도 된다(전부 풀고 다시 잡는다).
+function wireShortcuts(override = {}) {
+  globalShortcut.unregisterAll()
+  const hotkeys = { ...sanitizeHotkeys(settings.get('hotkeys')), ...override }
+  const taken = new Set()
+  const failed = []
+  hotkeyOk = {}
 
+  for (const [key, run] of Object.entries(HOTKEY_ACTIONS)) {
+    const accel = hotkeys[key]
+    let ok = false
+    // 같은 조합을 두 자리에 걸면 나중 것이 조용히 진다 — 아예 잡지 않고 실패로 적는다
+    if (accel && !taken.has(accel)) {
+      try {
+        ok = globalShortcut.register(accel, run) && globalShortcut.isRegistered(accel)
+      } catch {
+        ok = false // 조합 문자열 자체가 잘못되면 register가 던진다
+      }
+    }
+    if (ok) taken.add(accel)
+    hotkeyOk[key] = ok
+    if (accel && !ok) failed.push(`${HOTKEY_LABELS[key]} ${hotkeyLabel(accel)}`)
+  }
+
+  shortcutFailures = failed
   if (shortcutFailures.length) {
     console.warn('[shortcut] 다른 앱이 쥐고 있어 등록하지 못했습니다:', shortcutFailures.join(' · '))
+  }
+  lifecycle.refresh()
+  return hotkeyOk
+}
+
+/** 설정 화면에 실어 보내는 설정 스냅샷 — 단축키 등록 상태와 사람 표기까지 함께. */
+function settingsSnapshot() {
+  const hotkeys = sanitizeHotkeys(settings.get('hotkeys'))
+  return {
+    ...settings.all,
+    hotkeys,
+    hotkeyOk: { ...hotkeyOk },
+    hotkeyLabels: Object.fromEntries(Object.keys(hotkeys).map((k) => [k, hotkeyLabel(hotkeys[k])])),
+    hotkeyNames: HOTKEY_LABELS,
+    hotkeyDefaults: { ...DEFAULT_HOTKEYS },
+    dataDir: DATA_DIR,
+    update: updateInfo(),
+  }
+}
+
+// 트레이 메뉴와 같은 줄(updateLine) — 두 곳이 다른 말을 하면 어느 쪽이 맞는지 알 수 없다
+function updateInfo() {
+  return {
+    ...updateState,
+    current: app.getVersion(),
+    line: updateLine(updateState, { current: app.getVersion() }),
+    supported: updater?.supported ?? false,
   }
 }
 
@@ -623,9 +701,10 @@ app.whenReady().then(async () => {
   }
 
   if (process.argv.includes('--shortcut-check')) {
-    wireShortcuts()
-    for (const key of ['Control+Alt+Left', 'Control+Alt+Right', 'Control+Alt+S', 'Control+Alt+P']) {
-      console.log(`[key] ${key.padEnd(20)} ${globalShortcut.isRegistered(key) ? '등록됨' : '실패'}`)
+    const ok = wireShortcuts()
+    for (const [key, accel] of Object.entries(sanitizeHotkeys(settings.get('hotkeys')))) {
+      const state = accel ? (ok[key] ? '등록됨' : '실패') : '안 씀'
+      console.log(`[key] ${(accel || '(비움)').padEnd(20)} ${HOTKEY_LABELS[key]} ${state}`)
     }
     app.exit(0)
     return
