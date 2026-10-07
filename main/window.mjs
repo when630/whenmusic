@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { pickPosition } from './place.mjs'
+import { activateWindow, deactivateWindow } from './platform/index.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
@@ -29,7 +30,8 @@ export function createWindow({ settings }) {
   }
 
   function remember() {
-    if (!win || win.isDestroyed()) return
+    // 최소화 중의 bounds는 화면 밖(-32000)이다 — 숨길 때 minimize를 거치므로(D-29) 그 값을 자리로 적으면 안 된다
+    if (!win || win.isDestroyed() || win.isMinimized()) return
     const b = win.getBounds()
     settings.set('window', { x: b.x, y: b.y, width: b.width, height: b.height })
   }
@@ -79,7 +81,7 @@ export function createWindow({ settings }) {
       if (win.isDestroyed()) return
       e.preventDefault()
       remember()
-      win.hide()
+      deactivateWindow(win) // 직전 창으로 포커스가 돌아가게 — Windows는 minimize를 거쳐 숨긴다(D-29)
     })
 
     win.on('moved', remember)
@@ -96,12 +98,11 @@ export function createWindow({ settings }) {
 
       if (win.isVisible() && win.isFocused()) {
         remember()
-        win.hide()
+        deactivateWindow(win)
         return false
       }
 
-      win.show()
-      win.focus()
+      activateWindow(win)
       return true
     },
 
@@ -111,15 +112,18 @@ export function createWindow({ settings }) {
         build()
         return
       }
-      win.show()
-      win.focus()
+      activateWindow(win)
     },
 
-    /** 닫아도 앱은 트레이에 남는다 (HIST-09) — 실제로는 감출 뿐이다. */
+    /**
+     * 닫아도 앱은 트레이에 남는다 (HIST-09) — 실제로는 감출 뿐이다.
+     * Esc·헤더 ×·단축키 토글이 전부 여기를 탄다. 숨기는 순서는 platform이 안다(D-29) —
+     * Windows는 minimize를 거쳐야 직전 창에 포커스가 돌아오고, 그래서 보일 때 restore가 먼저다.
+     */
     hide() {
       if (!win || win.isDestroyed() || !win.isVisible()) return
       remember()
-      win.hide()
+      deactivateWindow(win)
     },
 
     get visible() {
