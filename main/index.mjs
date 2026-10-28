@@ -1,3 +1,5 @@
+import { registerAppearance } from './appearance.mjs'
+registerAppearance()
 // 앱 부트. 배선만 한다 — 계산은 session.mjs, 창은 card.mjs, 애드온은 control.mjs.
 import { app, dialog, globalShortcut, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
