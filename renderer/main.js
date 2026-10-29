@@ -502,8 +502,6 @@ function renderSettings() {
   box.append(open)
 
   item('데이터 폴더', settings.dataDir ?? '', box)
-
-  window.whenAppearanceUI.mount(el.list);
 }
 
 // --- 불러오기 --------------------------------------------------------------
